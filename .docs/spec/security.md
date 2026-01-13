@@ -44,44 +44,65 @@ CREATE POLICY payments_user ON payments
 
 ---
 
-## 2. アカウント統合
+## 2. 認証方式
 
-### Supabase Auth統合方針
+### LINE Login + JWT
 
-**正の定義**: Supabase Authが認証の唯一の正とする
+**方針**: LINE Login単独認証 + JWTセッション管理
 
-**対応プロバイダ**:
-- Email/Password
-- Google OAuth
-- LINE Login
+**認証フロー**:
+1. `/api/auth/line` - LINE認証開始 (state生成、Cookie保存)
+2. LINE認可画面 → 認証
+3. `/api/auth/line/callback` - コールバック処理
+   - state検証 (CSRF対策)
+   - トークン交換
+   - ID Token検証
+   - プロフィール取得
+   - ユーザーupsert
+   - JWTセッション発行
 
-**アカウント統合ルール**:
-1. 同一メールアドレスでの複数プロバイダ連携を許可
-2. Supabase Authが自動的にアカウントをリンク（email一致時）
-3. `users`テーブルは`supabase_uid`で一意性を担保
+**セキュリティ対策**:
+- CSRF: state パラメータで保護 (nanoid生成、Cookie保存、検証)
+- XSS: HttpOnly Cookie
+- セッション固定: 認証成功時に新規JWT発行
+
+**JWT Cookie属性**:
+```typescript
+{
+  httpOnly: true,
+  secure: true,  // 本番環境のみ
+  sameSite: "lax",
+  path: "/",
+  maxAge: 60 * 60 * 24 * 30,  // 30日
+}
+```
+
+**JWT設計**:
+- 有効期限: 30日
+- ローテーション: 残り7日未満でアクセス時に再発行
+- ペイロード: `{ openId, name, iat, exp }`
+- 署名: HS256 (jose)
 
 **usersテーブル管理**:
 ```typescript
-// 初回サインイン時にusersレコード作成
-async function ensureUserRecord(supabaseUser: User) {
-  const existing = await db.query.users.findFirst({
-    where: eq(users.supabase_uid, supabaseUser.id)
+// 初回サインイン時にusersレコード作成/更新
+async function upsertUser(data: { openId, name, email, loginMethod }) {
+  await db.insert(users).values({
+    openId: data.openId,
+    name: data.name,
+    email: data.email,
+    loginMethod: "line",
+    role: data.openId === ENV.ownerOpenId ? "admin" : "user",
+  }).onConflictDoUpdate({
+    target: users.openId,
+    set: { name, email, lastSignedIn: new Date() }
   });
-
-  if (!existing) {
-    await db.insert(users).values({
-      supabase_uid: supabaseUser.id,
-      email: supabaseUser.email,
-      name: supabaseUser.user_metadata?.name || supabaseUser.email,
-      role: 'user'
-    });
-  }
 }
 ```
 
 **注意点**:
 - LINE Loginはメールアドレスが取得できない場合あり
-- その場合は`email`をnullableに設定し、別途入力を促す
+- `email`はnullable設定
 
 ---
 

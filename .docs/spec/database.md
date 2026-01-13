@@ -6,11 +6,14 @@
 | カラム | 型 | 説明 |
 |--------|-----|------|
 | id | SERIAL | PK |
-| supabase_uid | VARCHAR(64) | Auth UID |
+| open_id | VARCHAR(64) | LINE userId (UNIQUE) |
 | name | TEXT | 表示名 |
-| email | VARCHAR(320) | メール |
+| email | VARCHAR(320) | メール (nullable, LINE許可時のみ) |
+| login_method | VARCHAR(64) | 認証方式 (default: "line") |
 | role | VARCHAR(20) | user/admin |
 | created_at | TIMESTAMP | 作成日時 |
+| updated_at | TIMESTAMP | 更新日時 |
+| last_signed_in | TIMESTAMP | 最終ログイン日時 |
 
 ### templates
 | カラム | 型 | 説明 |

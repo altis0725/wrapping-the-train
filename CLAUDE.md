@@ -7,8 +7,8 @@
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS + shadcn/ui
-- **DB/Auth**: Supabase (Auth, Database, Storage)
-- **ORM**: Drizzle ORM
+- **Auth**: LINE Login + JWT (jose)
+- **DB**: PostgreSQL (Drizzle ORM 直接接続)
 - **Payment**: Stripe
 - **Video**: Shotstack (ルママスク合成)
 - **Deploy**: Railway
@@ -44,11 +44,11 @@ src/
 ├── db/
 │   └── schema.ts            # Drizzleスキーマ
 ├── lib/
+│   ├── auth/                # 認証 (LINE OAuth, JWT session)
 │   ├── services/            # ビジネスロジック
 │   ├── validations/         # Zodスキーマ
 │   └── shotstack.ts         # Shotstack連携
-└── utils/
-    └── supabase/            # Supabase設定
+└── middleware.ts            # JWT検証・ルート保護
 ```
 
 ## 主要画面
@@ -104,5 +104,7 @@ export function PageContent({ data }) { ... }
 | ファイル | 用途 |
 |---------|------|
 | `~/Documents/train-canvas/server/_core/shotstack.ts` | ルママスク合成 |
+| `~/Documents/train-canvas/server/_core/lineAuth.ts` | LINE認証フロー |
+| `~/Documents/train-canvas/server/_core/sdk.ts` | JWTセッション管理 |
 | `~/Documents/train-canvas/drizzle/schema.ts` | スキーマ定義 |
 | `~/Documents/train-canvas/client/src/pages/CreateVideo.tsx` | 3段階選択UI |

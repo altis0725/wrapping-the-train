@@ -18,11 +18,14 @@ import { relations, sql } from "drizzle-orm";
 // ============================================================================
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  supabaseUid: varchar("supabase_uid", { length: 64 }).notNull().unique(),
+  openId: varchar("open_id", { length: 64 }).notNull().unique(),
   name: text("name"),
-  email: varchar("email", { length: 320 }).notNull(),
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("login_method", { length: 64 }).default("line"),
   role: varchar("role", { length: 20 }).notNull().default("user"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  lastSignedIn: timestamp("last_signed_in").notNull().defaultNow(),
 });
 
 export const usersRelations = relations(users, ({ many }) => ({

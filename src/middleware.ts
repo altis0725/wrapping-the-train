@@ -1,18 +1,95 @@
-import { type NextRequest } from "next/server";
-import { updateSession } from "@/utils/supabase/middleware";
+import { NextResponse, type NextRequest } from "next/server";
+import { jwtVerify } from "jose";
+
+const COOKIE_NAME = "app_session_id";
+
+// 保護が必要なルート
+const PROTECTED_ROUTES = ["/create", "/mypage", "/reservations"];
+const ADMIN_ROUTES = ["/admin"];
+const PUBLIC_ROUTES = ["/", "/login", "/terms", "/privacy", "/law", "/contact"];
+
+function getSecretKey() {
+  const secret = process.env.JWT_SECRET ?? "";
+  return new TextEncoder().encode(secret);
+}
+
+async function verifyToken(token: string): Promise<{ openId: string; name: string } | null> {
+  try {
+    const secretKey = getSecretKey();
+    const { payload } = await jwtVerify(token, secretKey, {
+      algorithms: ["HS256"],
+    });
+
+    const { openId, name } = payload as Record<string, unknown>;
+    if (typeof openId !== "string" || typeof name !== "string") {
+      return null;
+    }
+
+    return { openId, name };
+  } catch {
+    return null;
+  }
+}
 
 export async function middleware(request: NextRequest) {
-  return await updateSession(request);
+  const { pathname } = request.nextUrl;
+
+  // 静的ファイル、API、認証エンドポイントはスキップ
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/webhooks") ||
+    pathname.includes(".") // 静的ファイル
+  ) {
+    return NextResponse.next();
+  }
+
+  // 公開ルートはスキップ
+  if (PUBLIC_ROUTES.some((route) => pathname === route)) {
+    return NextResponse.next();
+  }
+
+  // セッション検証
+  const token = request.cookies.get(COOKIE_NAME)?.value;
+  const session = token ? await verifyToken(token) : null;
+
+  // 保護ルートのチェック
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
+  const isAdminRoute = ADMIN_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  if ((isProtectedRoute || isAdminRoute) && !session) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("returnTo", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Admin権限チェック (簡易版 - 環境変数のオーナーIDのみ)
+  if (isAdminRoute && session) {
+    const ownerOpenId = process.env.OWNER_OPEN_ID ?? "";
+    if (session.openId !== ownerOpenId) {
+      // Admin権限なし → ホームにリダイレクト
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * Match all request paths except:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * - public files (images, etc.)
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
