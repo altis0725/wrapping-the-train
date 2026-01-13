@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "updatedAt": "2026-01-13T06:32:05.732Z",
+  "skills": {
+    "skill-creator": {
+      "count": 1,
+      "lastUsed": "2026-01-13T06:16:42.852Z"
+    }
+  },
+  "commands": {
+    "harness-init": {
+      "count": 1,
+      "lastUsed": "2026-01-13T05:40:10.803Z"
+    },
+    "plan-with-agent-ci": {
+      "count": 1,
+      "lastUsed": "2026-01-13T05:50:43.222Z"
+    },
+    "work": {
+      "count": 1,
+      "lastUsed": "2026-01-13T06:23:18.092Z"
+    }
+  },
+  "agents": {
+    "Explore": {
+      "count": 1,
+      "lastUsed": "2026-01-13T06:00:10.805Z"
+    }
+  },
+  "hooks": {
+    "session-init": {
+      "triggered": 3,
+      "blocked": 0,
+      "lastTriggered": "2026-01-13T06:22:34.650Z"
+    },
+    "pretooluse-guard": {
+      "triggered": 2,
+      "blocked": 2,
+      "lastTriggered": "2026-01-13T06:32:05.731Z"
+    }
+  }
+}

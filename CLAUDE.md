@@ -17,12 +17,18 @@
 
 ```
 .docs/
-├── spec/                    # 仕様書
+├── spec/                    # 仕様書 (詳細は spec/README.md 参照)
+│   ├── README.md            # 仕様書構成ガイド
 │   ├── overview.md          # システム概要
 │   ├── screens.md           # 画面仕様
 │   ├── database.md          # DB設計
 │   ├── api.md               # API仕様
-│   └── business-logic.md    # ビジネスロジック
+│   ├── business-logic.md    # ビジネスロジック
+│   ├── state-machine.md     # 状態遷移表
+│   ├── security.md          # RLS・認証・削除制約
+│   ├── error-handling.md    # 失敗時補償・冪等性
+│   ├── integrations.md      # 外部連携
+│   └── phase2/              # Phase 2 仕様
 └── design-mock/             # デザインモック
 
 src/
@@ -75,11 +81,23 @@ export function PageContent({ data }) { ... }
 
 ## 参照ドキュメント
 
+**仕様書一覧**: [.docs/spec/README.md](.docs/spec/README.md)
+
+### 基本仕様
 - [システム概要](.docs/spec/overview.md)
 - [画面仕様](.docs/spec/screens.md)
 - [DB設計](.docs/spec/database.md)
 - [API仕様](.docs/spec/api.md)
 - [ビジネスロジック](.docs/spec/business-logic.md)
+
+### 詳細仕様
+- [状態遷移表](.docs/spec/state-machine.md)
+- [セキュリティ・認証](.docs/spec/security.md)
+- [エラーハンドリング](.docs/spec/error-handling.md)
+- [外部連携](.docs/spec/integrations.md)
+
+### Phase 2
+- [物理配信](.docs/spec/phase2/projection-delivery.md)
 
 ## 参照実装 (train-canvas)
 
