@@ -10,6 +10,10 @@ const PUBLIC_ROUTES = ["/", "/login", "/terms", "/privacy", "/law", "/contact"];
 
 function getSecretKey() {
   const secret = process.env.JWT_SECRET ?? "";
+  // session.ts と同じ検証ロジックを適用
+  if (!secret || secret.length < 32) {
+    throw new Error("JWT_SECRET must be at least 32 characters");
+  }
   return new TextEncoder().encode(secret);
 }
 

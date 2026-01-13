@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
 
     if (!storedState || state !== storedState) {
       console.error("[Auth] State mismatch");
+      // State 検証失敗時も Cookie を削除（リプレイ攻撃対策）
+      cookieStore.delete(STATE_COOKIE_NAME);
+      cookieStore.delete(REDIRECT_COOKIE_NAME);
       return NextResponse.redirect(`${ENV.appUrl}/login?error=invalid_state`);
     }
 
