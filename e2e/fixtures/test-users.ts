@@ -78,14 +78,17 @@ export const STORAGE_STATE_PATHS = {
 
 /**
  * テスト用テンプレートデータ
+ * 
+ * 動画URLはShotstackからアクセス可能な公開URLを使用
+ * （Google Cloud Storageのサンプル動画）
  */
 export const TEST_TEMPLATES = [
   {
     id: 9901,
     category: 1, // 背景
     title: "Test Background Template",
-    videoUrl: "https://example.com/test-bg.mp4",
-    thumbnailUrl: "https://example.com/test-bg-thumb.jpg",
+    videoUrl: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    thumbnailUrl: "https://via.placeholder.com/320x180?text=Background",
     displayOrder: 1,
     isActive: 1,
   },
@@ -93,8 +96,8 @@ export const TEST_TEMPLATES = [
     id: 9902,
     category: 2, // 窓
     title: "Test Window Template",
-    videoUrl: "https://example.com/test-window.mp4",
-    thumbnailUrl: "https://example.com/test-window-thumb.jpg",
+    videoUrl: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    thumbnailUrl: "https://via.placeholder.com/320x180?text=Window",
     displayOrder: 1,
     isActive: 1,
   },
@@ -102,8 +105,8 @@ export const TEST_TEMPLATES = [
     id: 9903,
     category: 3, // 車輪
     title: "Test Wheel Template",
-    videoUrl: "https://example.com/test-wheel.mp4",
-    thumbnailUrl: "https://example.com/test-wheel-thumb.jpg",
+    videoUrl: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    thumbnailUrl: "https://via.placeholder.com/320x180?text=Wheel",
     displayOrder: 1,
     isActive: 1,
   },
@@ -119,7 +122,7 @@ export function createTestVideos(userId: number) {
       template1Id: 9901,
       template2Id: 9902,
       template3Id: 9903,
-      videoUrl: "https://example.com/test-video-1.mp4",
+      videoUrl: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
       videoType: "free",
       status: "completed",
     },
@@ -128,7 +131,7 @@ export function createTestVideos(userId: number) {
       template1Id: 9901,
       template2Id: 9902,
       template3Id: 9903,
-      videoUrl: "https://example.com/test-video-2.mp4",
+      videoUrl: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
       videoType: "free",
       status: "pending",
     },
