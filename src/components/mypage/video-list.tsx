@@ -195,41 +195,57 @@ function VideoCard({
     video.status === VIDEO_STATUS.PROCESSING;
 
   return (
-    <Card data-testid="video-item">
-      <CardContent className="p-4">
-        <div className="aspect-video bg-muted rounded-md mb-3 relative overflow-hidden">
+    <Card data-testid="video-item" className="bg-black/40 border-white/10 overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group">
+      <CardContent className="p-0">
+        <div className="aspect-video bg-black/60 relative overflow-hidden group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all duration-500">
           {video.template1?.thumbnailUrl ? (
             <img
               src={video.template1.thumbnailUrl}
               alt="サムネイル"
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <Play className="h-8 w-8 text-muted-foreground" />
+              <Play className="h-12 w-12 text-white/20 group-hover:text-cyan-400 transition-colors duration-300" />
             </div>
           )}
-          {isProcessing && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <div className="text-white text-center">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto" />
-                <p className="text-sm mt-2">処理中...</p>
-              </div>
-            </div>
-          )}
-        </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Badge variant={status.variant}>{status.label}</Badge>
-            <Badge variant={video.videoType === "paid" ? "default" : "secondary"}>
-              {video.videoType === "paid" ? "有料" : "無料"}
+          {/* Status Overlay */}
+          <div className="absolute top-2 right-2 flex gap-2">
+            <Badge variant="outline" className={`backdrop-blur-md ${video.videoType === "paid"
+                ? "bg-yellow-500/20 border-yellow-500/50 text-yellow-400"
+                : "bg-cyan-500/20 border-cyan-500/50 text-cyan-400"
+              }`}>
+              {video.videoType === "paid" ? "PREMIUM" : "FREE"}
+            </Badge>
+            <Badge variant="outline" className={`backdrop-blur-md border-opacity-50 ${status.variant === "default" ? "bg-cyan-500/20 border-cyan-500 text-cyan-400" :
+                status.variant === "secondary" ? "bg-white/10 border-white/20 text-white/70" :
+                  status.variant === "destructive" ? "bg-red-500/20 border-red-500 text-red-400" :
+                    "bg-green-500/20 border-green-500 text-green-400"
+              }`}>
+              {status.label}
             </Badge>
           </div>
 
-          <div className="text-sm text-muted-foreground space-y-1">
-            <div className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+          {isProcessing && (
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+              <div className="text-cyan-400 text-center">
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
+                <p className="text-sm font-orbitron tracking-wider">PROCESSING...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Cyber scan effect on hover */}
+          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-500">
+            <div className="absolute inset-0 bg-gradient-to-t from-cyan-900/20 to-transparent" />
+          </div>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5 text-cyan-500/70" />
               <span>
                 {formatDistanceToNow(new Date(video.createdAt), {
                   addSuffix: true,
@@ -238,31 +254,39 @@ function VideoCard({
               </span>
             </div>
             {video.expiresAt && (
-              <div className="flex items-center gap-1 text-xs">
-                <span>有効期限: {format(new Date(video.expiresAt), "yyyy/MM/dd")}</span>
-              </div>
+              <span className="text-orange-400/80">
+                EXP: {format(new Date(video.expiresAt), "MM/dd")}
+              </span>
             )}
           </div>
 
           {isFailed && video.lastError && (
-            <p className="text-xs text-destructive truncate">
-              エラー: {video.lastError}
-            </p>
+            <div className="bg-red-950/30 border border-red-900/50 rounded p-2 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-300 break-all line-clamp-2">
+                {video.lastError}
+              </p>
+            </div>
           )}
 
-          <div className="flex items-center gap-2 pt-2">
+          <div className="flex items-center gap-2 pt-1">
             {isCompleted && video.videoUrl && (
               <>
                 <Button
                   size="sm"
                   variant="outline"
+                  className="flex-1 bg-transparent border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300"
                   onClick={() => onDownload(video.videoUrl!)}
                 >
-                  <Download className="h-4 w-4 mr-1" />
-                  ダウンロード
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  保存
                 </Button>
-                <Button size="sm" onClick={() => onReserve(video.id)}>
-                  <Calendar className="h-4 w-4 mr-1" />
+                <Button
+                  size="sm"
+                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white border-0 shadow-[0_0_10px_rgba(8,145,178,0.5)]"
+                  onClick={() => onReserve(video.id)}
+                >
+                  <Calendar className="h-3.5 w-3.5 mr-1.5" />
                   予約
                 </Button>
               </>
@@ -271,25 +295,26 @@ function VideoCard({
               <Button
                 size="sm"
                 variant="outline"
+                className="flex-1 border-white/20 hover:bg-white/10"
                 onClick={() => onRetry(video.id)}
                 disabled={isRetrying}
               >
                 <RefreshCw
-                  className={`h-4 w-4 mr-1 ${isRetrying ? "animate-spin" : ""}`}
+                  className={`h-3.5 w-3.5 mr-2 ${isRetrying ? "animate-spin" : ""}`}
                 />
-                リトライ ({video.retryCount}/3)
+                再試行
               </Button>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="ml-auto">
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-white/50 hover:text-white hover:bg-white/10">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="bg-black/90 border-white/10 backdrop-blur-xl">
                 <DropdownMenuItem
                   onClick={() => onDelete(video)}
-                  className="text-destructive"
+                  className="text-red-400 hover:text-red-300 focus:text-red-300 focus:bg-red-950/30 cursor-pointer"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   削除

@@ -15,6 +15,14 @@
 /.auth
 /playwright-report
 /test-results
+/test-screenshots
+
+# large video files
+/public/video/
+
+# temporary test images
+*.png
+!public/**/*.png
 
 # next.js
 /.next/

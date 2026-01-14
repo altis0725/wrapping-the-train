@@ -69,7 +69,21 @@
     @apply bg-background text-foreground;
     font-family: 'Noto Sans JP', sans-serif;
   }
-  h1, h2, h3, h4, h5, h6 {
+  /* Mobile-first heading adjustments */
+  h1 {
+    @apply text-3xl md:text-4xl lg:text-5xl font-bold;
+    font-family: 'Orbitron', sans-serif;
+  }
+  h2 {
+    @apply text-2xl md:text-3xl lg:text-4xl font-semibold;
+    font-family: 'Orbitron', sans-serif;
+  }
+  h3 {
+    @apply text-xl md:text-2xl font-semibold;
+    font-family: 'Orbitron', sans-serif;
+  }
+  h4, h5, h6 {
+    @apply text-lg font-medium;
     font-family: 'Orbitron', sans-serif;
   }
 }

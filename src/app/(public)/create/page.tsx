@@ -25,19 +25,33 @@ export default async function CreatePage() {
   const templates = await getAllTemplates();
 
   return (
-    <main className="container max-w-6xl py-8">
-      <div className="glass-panel p-8 rounded-2xl border-white/5 animate-fade-in-up">
-        <div className="space-y-8">
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold font-orbitron text-glow">
-              動画を作成
-            </h1>
-            <p className="text-slate-400">
-              3つのテンプレートを選んで、あなただけの動画を作りましょう
-            </p>
-          </div>
+    <main className="relative min-h-screen py-24 sm:py-32 overflow-hidden">
+      {/* Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-20 left-10 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px]" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px]" />
+      </div>
 
-          <CreateVideoForm templates={templates} />
+      <div className="container relative z-10 max-w-6xl px-4 sm:px-6 lg:px-8">
+        <div className="glass-panel p-8 md:p-12 rounded-3xl border-white/10 animate-fade-in-up shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black/40 backdrop-blur-xl">
+          <div className="space-y-12">
+            <div className="text-center space-y-4">
+              <h1 className="text-4xl md:text-5xl font-bold font-orbitron text-glow bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-400">
+                CREATE VIDEO
+              </h1>
+              <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+                3つのテンプレートを選んで、あなただけの動画を作りましょう。<br />
+                プレビューを見ながら直感的に操作できます。
+              </p>
+            </div>
+
+            <div className="relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-cyan-500/20 rounded-2xl blur opacity-30" />
+              <div className="relative">
+                <CreateVideoForm templates={templates} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </main>
