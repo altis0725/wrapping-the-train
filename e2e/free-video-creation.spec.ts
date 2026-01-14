@@ -1,18 +1,14 @@
 /**
  * 無料動画作成フローのE2Eテスト
  * Cookie設定から動画作成までをテスト
+ * 
+ * 注意: このテストはglobal-setupで作成されたdev_user_001ユーザーを使用します
  */
 
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
-
-const SESSION_COOKIE = {
-  name: 'app_session_id',
-  value: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvcGVuSWQiOiJkZXZfdXNlcl8wMDEiLCJuYW1lIjoiRGV2IFVzZXIiLCJpYXQiOjE3NjgzOTY5MjUsImV4cCI6MTc3MDk4ODkyNX0.9K0I1zb2Il7O827CmOZkEvUJOVnYF-1xRw14xN1EsZA',
-  domain: 'localhost',
-  path: '/',
-};
+import { SignJWT } from 'jose';
 
 const SCREENSHOT_DIR = path.join(__dirname, '..', 'test-screenshots');
 const BASE_URL = 'http://localhost:3000';
@@ -20,6 +16,23 @@ const BASE_URL = 'http://localhost:3000';
 // Ensure screenshot directory exists
 if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
+}
+
+// 動的にJWTトークンを生成する関数
+async function createSessionToken(): Promise<string> {
+  const jwtSecret = process.env.JWT_SECRET || 'KTxGHezhgEwdyHO1gy3yLsOOHC4MK3CfQInyKBVqVQU=';
+  const secretKey = new TextEncoder().encode(jwtSecret);
+  const now = Date.now();
+  const expiresAt = Math.floor((now + 1000 * 60 * 60 * 24 * 30) / 1000); // 30日
+
+  return new SignJWT({
+    openId: 'dev_user_001',
+    name: 'Dev User',
+  })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime(expiresAt)
+    .sign(secretKey);
 }
 
 test.describe('Free Video Creation Flow', () => {
@@ -30,9 +43,15 @@ test.describe('Free Video Creation Flow', () => {
     page.on('console', msg => console.log('BROWSER:', msg.text()));
     page.on('pageerror', error => console.error('PAGE ERROR:', error));
 
-    // Step 1: Set session cookie
-    console.log('1️⃣  Setting session cookie...');
-    await context.addCookies([SESSION_COOKIE]);
+    // Step 1: Generate and set session cookie
+    console.log('1️⃣  Generating and setting session cookie...');
+    const token = await createSessionToken();
+    await context.addCookies([{
+      name: 'app_session_id',
+      value: token,
+      domain: 'localhost',
+      path: '/',
+    }]);
     console.log('✅ Cookie set\n');
 
     // Step 2: Navigate to /create
@@ -44,7 +63,16 @@ test.describe('Free Video Creation Flow', () => {
     });
     console.log('✅ Page loaded\n');
 
-    // Verify we're on the create page
+    // Verify we're on the create page (not redirected to login)
+    const currentUrl = page.url();
+    if (currentUrl.includes('/login')) {
+      console.error('❌ Redirected to login page - authentication failed');
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, '09-error-login-redirect.png'),
+        fullPage: true
+      });
+      throw new Error('Authentication failed - redirected to login page');
+    }
     await expect(page).toHaveURL(/\/create/);
 
     // Step 3: Select first template in Step 1 (背景)
@@ -53,11 +81,20 @@ test.describe('Free Video Creation Flow', () => {
 
     // Find the first template card using data-testid
     const step1Cards = page.locator('[data-testid="template-card"]');
-    await step1Cards.first().waitFor({ state: 'visible' });
+    await step1Cards.first().waitFor({ state: 'visible', timeout: 10000 });
 
     // Count available cards
     const cardCount = await step1Cards.count();
     console.log(`   Found ${cardCount} templates on current page`);
+
+    if (cardCount === 0) {
+      console.error('❌ No templates found - database may not have templates');
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, '09-error-no-templates.png'),
+        fullPage: true
+      });
+      throw new Error('No templates found on the page');
+    }
 
     await step1Cards.first().click();
     await page.waitForTimeout(500);
@@ -131,7 +168,7 @@ test.describe('Free Video Creation Flow', () => {
     });
     console.log('✅ Video creation started\n');
 
-    // Step 7: Wait for video generation (check for loading state or redirect)
+    // Step 7: Wait for video generation (check for loading state or completion)
     console.log('9️⃣  Waiting for video generation...');
     console.log('   (This may take up to 3 minutes)\n');
 
@@ -153,15 +190,23 @@ test.describe('Free Video Creation Flow', () => {
         break;
       }
 
-      // Check for loading indicators
-      const hasLoading = await page.locator('[data-loading="true"], [role="status"], .animate-spin').count() > 0;
-
       // Check for success/completion messages
-      const hasSuccess = await page.getByText(/完成|完了|成功/i).count() > 0;
+      const hasSuccess = await page.getByText(/完成|動画が完成しました/i).count() > 0;
 
-      if (hasSuccess && !hasLoading) {
+      if (hasSuccess) {
         videoCompleted = true;
         console.log('✅ Success indicator found\n');
+        break;
+      }
+
+      // Check for failure
+      const hasFailed = await page.getByText(/失敗|エラー/i).count() > 0;
+      if (hasFailed) {
+        console.log('❌ Video generation failed');
+        await page.screenshot({
+          path: path.join(SCREENSHOT_DIR, '09-error-generation-failed.png'),
+          fullPage: true
+        });
         break;
       }
 

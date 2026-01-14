@@ -54,6 +54,15 @@ export const TEST_USERS = {
     role: "admin",
     loginMethod: "test",
   },
+
+  /** 開発用ユーザー（free-video-creation.spec.ts用） */
+  devUser: {
+    openId: "dev_user_001",
+    name: "Dev User",
+    email: "dev@example.com",
+    role: "user",
+    loginMethod: "test",
+  },
 } as const satisfies Record<string, TestUserData>;
 
 /**
@@ -64,6 +73,7 @@ export const STORAGE_STATE_PATHS = {
   userWithVideos: ".auth/user-with-videos.json",
   userWithReservations: ".auth/user-with-reservations.json",
   admin: ".auth/admin.json",
+  devUser: ".auth/dev-user.json",
 } as const;
 
 /**
