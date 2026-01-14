@@ -58,17 +58,19 @@ export default async function ReservationsPage() {
 
   return (
     <main className="container max-w-2xl py-8">
-      <div className="space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">投影予約</h1>
-          <p className="text-muted-foreground">
-            水間鉄道でのプロジェクションマッピング投影を予約
-          </p>
-        </div>
+      <div className="glass-panel p-8 rounded-2xl border-white/5 animate-fade-in-up">
+        <div className="space-y-8">
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold font-orbitron text-glow">投影予約</h1>
+            <p className="text-slate-400">
+              水間鉄道でのプロジェクションマッピング投影を予約
+            </p>
+          </div>
 
-        <Suspense fallback={<LoadingSkeleton />}>
-          <ReservationForm videos={videos} availableDates={availableDates} />
-        </Suspense>
+          <Suspense fallback={<LoadingSkeleton />}>
+            <ReservationForm videos={videos} availableDates={availableDates} />
+          </Suspense>
+        </div>
       </div>
     </main>
   );

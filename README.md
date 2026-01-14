@@ -15,8 +15,9 @@
 
 ## 必要要件
 
-- Node.js 18+
-- Docker (PostgreSQL用)
+- Node.js 24.0.0+
+- pnpm 10.0.0+
+- Docker & Docker Compose (PostgreSQL用)
 - LINE Developers アカウント
 - Stripe アカウント
 - Shotstack アカウント
@@ -26,7 +27,7 @@
 ### 1. 依存パッケージインストール
 
 ```bash
-npm install
+pnpm install
 ```
 
 ### 2. 環境変数設定
@@ -58,13 +59,13 @@ docker-compose up -d
 ### 4. スキーマ適用
 
 ```bash
-npm run db:push
+pnpm run db:push
 ```
 
 ### 5. 開発サーバー起動
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 http://localhost:3000 でアクセス可能
@@ -73,15 +74,52 @@ http://localhost:3000 でアクセス可能
 
 | コマンド | 説明 |
 |---------|------|
-| `npm run dev` | 開発サーバー起動 |
-| `npm run build` | 本番ビルド |
-| `npm run start` | 本番サーバー起動 |
-| `npm run lint` | ESLint 実行 |
-| `npm run test` | ユニットテスト |
-| `npm run test:e2e` | E2Eテスト |
-| `npm run db:push` | DBスキーマ適用 |
-| `npm run db:studio` | DB管理UI |
-| `npm run db:migrate` | マイグレーション実行 |
+| `pnpm run dev` | 開発サーバー起動 |
+| `pnpm run build` | 本番ビルド |
+| `pnpm run start` | 本番サーバー起動 |
+| `pnpm run lint` | ESLint 実行 |
+| `pnpm run test` | ユニットテスト |
+| `pnpm run test:e2e` | E2Eテスト |
+| `pnpm run db:push` | DBスキーマ適用 |
+| `pnpm run db:studio` | DB管理UI |
+| `pnpm run db:migrate` | マイグレーション実行 |
+
+## API エンドポイント
+
+### 認証
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/auth/line` | LINE OAuth認証開始 |
+| GET | `/api/auth/line/callback` | LINEコールバック処理 |
+| GET/POST | `/api/auth/logout` | ログアウト |
+
+### 動画
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/videos/[id]/status` | 動画レンダリング状態取得 |
+
+### Webhook
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| POST | `/api/webhooks/stripe` | Stripe決済イベント処理 |
+
+### Cron (バックグラウンドジョブ)
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET/POST | `/api/cron/cleanup-videos` | 期限切れ動画削除 |
+| GET/POST | `/api/cron/release-holds` | 期限切れホールド解放 |
+
+### システム
+
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/api/health` | ヘルスチェック |
+| GET | `/api/dev-login` | 開発用ログイン (dev only) |
+| GET | `/api/debug-auth` | 認証デバッグ (dev only) |
 
 ## ドキュメント
 

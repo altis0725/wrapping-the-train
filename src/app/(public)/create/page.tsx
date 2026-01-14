@@ -26,15 +26,19 @@ export default async function CreatePage() {
 
   return (
     <main className="container max-w-6xl py-8">
-      <div className="space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">動画を作成</h1>
-          <p className="text-muted-foreground">
-            3つのテンプレートを選んで、あなただけの動画を作りましょう
-          </p>
-        </div>
+      <div className="glass-panel p-8 rounded-2xl border-white/5 animate-fade-in-up">
+        <div className="space-y-8">
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold font-orbitron text-glow">
+              動画を作成
+            </h1>
+            <p className="text-slate-400">
+              3つのテンプレートを選んで、あなただけの動画を作りましょう
+            </p>
+          </div>
 
-        <CreateVideoForm templates={templates} />
+          <CreateVideoForm templates={templates} />
+        </div>
       </div>
     </main>
   );

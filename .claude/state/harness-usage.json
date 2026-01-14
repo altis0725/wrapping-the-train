@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updatedAt": "2026-01-14T05:38:11.980Z",
+  "updatedAt": "2026-01-14T05:56:32.425Z",
   "skills": {
     "skill-creator": {
       "count": 1,
@@ -37,8 +37,8 @@
       "lastUsed": "2026-01-13T05:50:43.222Z"
     },
     "work": {
-      "count": 8,
-      "lastUsed": "2026-01-14T05:29:27.045Z"
+      "count": 9,
+      "lastUsed": "2026-01-14T05:56:32.425Z"
     },
     "codex-review": {
       "count": 3,
@@ -67,8 +67,8 @@
   },
   "agents": {
     "Explore": {
-      "count": 9,
-      "lastUsed": "2026-01-14T05:27:06.529Z"
+      "count": 12,
+      "lastUsed": "2026-01-14T05:47:58.751Z"
     },
     "Plan": {
       "count": 1,

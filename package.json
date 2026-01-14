@@ -39,6 +39,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.38.0",
+    "framer-motion": "^12.26.2",
     "jose": "^5.9.0",
     "lucide-react": "^0.469.0",
     "nanoid": "^5.0.9",

@@ -25,11 +25,13 @@ export default function RootLayout({
             className="w-full h-full object-cover opacity-60"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/40 to-black/60" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#020617]/30 to-[#020617]" />
         </div>
+
         {/* コンテンツ */}
-        <div className="relative z-10">
+        <div className="relative z-10 flex min-h-screen flex-col">
           <Header />
-          <main className="min-h-screen pt-16">{children}</main>
+          <main className="flex-1 pt-16">{children}</main>
           <Footer />
         </div>
       </body>

@@ -10,17 +10,17 @@ export default async function LoginPage({
   const returnTo = params.returnTo ?? "/mypage";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-md p-8 space-y-8">
+    <div className="min-h-[calc(100vh-80px)] flex items-center justify-center">
+      <div className="w-full max-w-md p-8 space-y-8 glass-panel rounded-2xl border-white/5 animate-fade-in-up">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">ログイン</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="text-2xl font-bold font-orbitron text-glow">ログイン</h1>
+          <p className="mt-2 text-slate-400">
             WRAPPING THE TRAIN へようこそ
           </p>
         </div>
 
         {error && (
-          <div className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm">
+          <div className="p-4 bg-destructive/10 text-destructive rounded-lg text-sm border border-destructive/20">
             {error === "invalid_state" && "セッションが無効です。もう一度お試しください。"}
             {error === "auth_failed" && "認証に失敗しました。もう一度お試しください。"}
             {error === "access_denied" && "アクセスが拒否されました。"}
@@ -32,7 +32,7 @@ export default async function LoginPage({
         <div className="space-y-4">
           <a
             href={`/api/auth/line?returnTo=${encodeURIComponent(returnTo)}`}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00B900] text-white rounded-lg hover:bg-[#00A000] transition-colors"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00B900] text-white rounded-lg hover:bg-[#00A000] transition-all duration-300 shadow-lg hover:shadow-[#00B900]/20 font-bold"
           >
             <svg
               viewBox="0 0 24 24"
@@ -45,14 +45,14 @@ export default async function LoginPage({
           </a>
         </div>
 
-        <div className="text-center text-sm text-muted-foreground">
+        <div className="text-center text-sm text-slate-400">
           <p>
             ログインすることで、
-            <Link href="/terms" className="underline hover:text-foreground">
+            <Link href="/terms" className="underline hover:text-white mx-1">
               利用規約
             </Link>
             と
-            <Link href="/privacy" className="underline hover:text-foreground">
+            <Link href="/privacy" className="underline hover:text-white mx-1">
               プライバシーポリシー
             </Link>
             に同意したものとみなされます。
@@ -60,7 +60,7 @@ export default async function LoginPage({
         </div>
 
         <div className="text-center">
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
+          <Link href="/" className="text-sm text-slate-400 hover:text-white">
             ← ホームに戻る
           </Link>
         </div>
