@@ -31,6 +31,7 @@ export function TemplateCard({
       tabIndex={0}
       aria-pressed={isSelected}
       aria-label={`${template.title}を選択${isSelected ? "（選択中）" : ""}`}
+      data-testid="template-card"
       className={cn(
         "cursor-pointer transition-all hover:ring-2 hover:ring-primary/50 focus:outline-none focus:ring-2 focus:ring-primary",
         isSelected && "ring-2 ring-primary"

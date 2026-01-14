@@ -16,6 +16,12 @@
 ├── security.md            # RLS・認証・削除制約
 ├── error-handling.md      # 失敗時補償・Webhook冪等性
 ├── integrations.md        # 外部連携（Shotstack/Stripe/タイムゾーン）
+├── race-conditions.md     # 競合シナリオと解決規則
+├── operations.md          # ログ戦略・メトリクス・アラート
+├── testing.md             # 単体/統合/E2Eテスト戦略
+├── notifications.md       # 通知仕様
+├── privacy.md             # データ保護・GDPR対応
+├── performance.md         # キャッシュ・CDN・DB最適化
 └── phase2/
     └── projection-delivery.md  # 物理配信仕様（Phase 2）
 ```

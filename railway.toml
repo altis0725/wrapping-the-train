@@ -1,0 +1,24 @@
+# Railway deployment configuration
+# https://docs.railway.app/reference/config-as-code
+
+[build]
+builder = "nixpacks"
+buildCommand = "pnpm run build"
+
+[deploy]
+startCommand = "pnpm start"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 120
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Cron Jobs (UTC)
+# 期限切れ仮押さえ解放: 毎分
+[[crons]]
+schedule = "* * * * *"
+endpoint = "/api/cron/release-holds"
+
+# 期限切れ動画削除: 毎日 18:00 UTC (03:00 JST)
+[[crons]]
+schedule = "0 18 * * *"
+endpoint = "/api/cron/cleanup-videos"

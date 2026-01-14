@@ -240,6 +240,30 @@ export const stateTransitionLogs = pgTable("state_transition_logs", {
 });
 
 // ============================================================================
+// admin_audit_logs テーブル (管理者操作監査ログ)
+// ============================================================================
+export const adminAuditLogs = pgTable(
+  "admin_audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    adminUserId: integer("admin_user_id")
+      .notNull()
+      .references(() => users.id),
+    action: varchar("action", { length: 50 }).notNull(), // CREATE, UPDATE, DELETE, CANCEL, REFUND, COMPLETE
+    entity: varchar("entity", { length: 30 }).notNull(), // template, reservation, schedule, payment
+    entityId: integer("entity_id"),
+    details: jsonb("details").$type<Record<string, unknown>>(),
+    ipAddress: varchar("ip_address", { length: 45 }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("admin_audit_logs_admin_idx").on(table.adminUserId),
+    index("admin_audit_logs_entity_idx").on(table.entity, table.entityId),
+    index("admin_audit_logs_created_idx").on(table.createdAt),
+  ]
+);
+
+// ============================================================================
 // 型エクスポート
 // ============================================================================
 export type User = typeof users.$inferSelect;
@@ -268,6 +292,9 @@ export type NewCompensationLog = typeof compensationLogs.$inferInsert;
 
 export type StateTransitionLog = typeof stateTransitionLogs.$inferSelect;
 export type NewStateTransitionLog = typeof stateTransitionLogs.$inferInsert;
+
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
+export type NewAdminAuditLog = typeof adminAuditLogs.$inferInsert;
 
 // ============================================================================
 // Enum定義 (TypeScript型として)

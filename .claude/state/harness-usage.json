@@ -1,10 +1,30 @@
 {
   "version": "1.0",
-  "updatedAt": "2026-01-13T06:32:05.732Z",
+  "updatedAt": "2026-01-14T05:38:11.980Z",
   "skills": {
     "skill-creator": {
       "count": 1,
       "lastUsed": "2026-01-13T06:16:42.852Z"
+    },
+    "assign-codex": {
+      "count": 5,
+      "lastUsed": "2026-01-14T02:57:37.267Z"
+    },
+    "review": {
+      "count": 1,
+      "lastUsed": "2026-01-13T17:54:49.852Z"
+    },
+    "codex-review": {
+      "count": 1,
+      "lastUsed": "2026-01-14T02:07:46.131Z"
+    },
+    "llm-debate": {
+      "count": 2,
+      "lastUsed": "2026-01-14T03:42:39.029Z"
+    },
+    "setup": {
+      "count": 1,
+      "lastUsed": "2026-01-14T05:24:34.218Z"
     }
   },
   "commands": {
@@ -17,26 +37,62 @@
       "lastUsed": "2026-01-13T05:50:43.222Z"
     },
     "work": {
+      "count": 8,
+      "lastUsed": "2026-01-14T05:29:27.045Z"
+    },
+    "codex-review": {
+      "count": 3,
+      "lastUsed": "2026-01-14T03:04:00.186Z"
+    },
+    "assign-codex": {
       "count": 1,
-      "lastUsed": "2026-01-13T06:23:18.092Z"
+      "lastUsed": "2026-01-13T15:53:16.288Z"
+    },
+    "llm-debate": {
+      "count": 2,
+      "lastUsed": "2026-01-13T17:42:11.252Z"
+    },
+    "harness-mem": {
+      "count": 4,
+      "lastUsed": "2026-01-14T03:29:34.042Z"
+    },
+    "plan-with-agent": {
+      "count": 2,
+      "lastUsed": "2026-01-14T05:24:28.731Z"
+    },
+    "harness-review": {
+      "count": 1,
+      "lastUsed": "2026-01-13T17:54:37.537Z"
     }
   },
   "agents": {
     "Explore": {
+      "count": 9,
+      "lastUsed": "2026-01-14T05:27:06.529Z"
+    },
+    "Plan": {
       "count": 1,
-      "lastUsed": "2026-01-13T06:00:10.805Z"
+      "lastUsed": "2026-01-13T17:37:04.885Z"
+    },
+    "claude-code-harness:code-reviewer": {
+      "count": 2,
+      "lastUsed": "2026-01-13T17:56:04.062Z"
+    },
+    "browser-agent": {
+      "count": 1,
+      "lastUsed": "2026-01-14T05:12:36.158Z"
     }
   },
   "hooks": {
     "session-init": {
-      "triggered": 3,
+      "triggered": 15,
       "blocked": 0,
-      "lastTriggered": "2026-01-13T06:22:34.650Z"
+      "lastTriggered": "2026-01-14T05:38:11.980Z"
     },
     "pretooluse-guard": {
-      "triggered": 2,
-      "blocked": 2,
-      "lastTriggered": "2026-01-13T06:32:05.731Z"
+      "triggered": 6,
+      "blocked": 6,
+      "lastTriggered": "2026-01-14T02:15:21.887Z"
     }
   }
 }

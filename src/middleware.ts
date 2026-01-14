@@ -57,6 +57,18 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const session = token ? await verifyToken(token) : null;
 
+  // DEBUG: 開発環境でのみデバッグ情報をログ
+  if (process.env.NODE_ENV === "development" && pathname.startsWith("/admin")) {
+    console.log("[Middleware Debug]", {
+      pathname,
+      tokenReceived: !!token,
+      tokenFirst50: token?.substring(0, 50),
+      sessionVerified: !!session,
+      sessionOpenId: session?.openId,
+      ownerOpenId: process.env.OWNER_OPEN_ID,
+    });
+  }
+
   // 保護ルートのチェック
   const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
     pathname.startsWith(route)

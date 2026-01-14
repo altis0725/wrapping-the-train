@@ -1,101 +1,220 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Train, Video, Calendar, Sparkles, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+const steps = [
+  {
+    icon: Video,
+    title: "動画を作成",
+    description:
+      "3つのテンプレートを組み合わせて、あなただけのオリジナル動画を作成。",
+  },
+  {
+    icon: Calendar,
+    title: "投影日時を予約",
+    description: "ご希望の日時を選んで、投影予約を確定。決済はオンラインで完結。",
+  },
+  {
+    icon: Sparkles,
+    title: "投影を体験",
+    description:
+      "水間鉄道の車両にあなたの動画が投影される、特別な瞬間をお楽しみください。",
+  },
+];
+
+const plans = [
+  {
+    name: "無料プラン",
+    price: "0",
+    description: "まずは動画作成を体験",
+    features: [
+      "動画作成（透かし入り）",
+      "プレビュー機能",
+      "7日間の動画保持",
+    ],
+    cta: "無料で始める",
+    ctaVariant: "outline" as const,
+    href: "/create",
+  },
+  {
+    name: "投影プラン",
+    price: "5,000",
+    description: "実際に投影を体験",
+    features: [
+      "高品質動画（透かしなし）",
+      "投影予約",
+      "投影後1年間の動画保持",
+      "現地での投影体験",
+    ],
+    cta: "動画を作成して予約",
+    ctaVariant: "default" as const,
+    href: "/create",
+    popular: true,
+  },
+];
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="flex flex-col">
+      {/* Hero Section */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-background to-muted/50 py-20 sm:py-32">
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="mb-8 flex justify-center">
+              <div className="relative rounded-full px-3 py-1 text-sm leading-6 text-muted-foreground ring-1 ring-ring/10 hover:ring-ring/20">
+                水間鉄道 × プロジェクションマッピング
+              </div>
+            </div>
+            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">
+              あなたの動画を
+              <br />
+              <span className="text-primary">電車に投影</span>しよう
+            </h1>
+            <p className="mt-6 text-lg leading-8 text-muted-foreground">
+              水間鉄道の夜間停車車両に、あなたが作成した動画を
+              プロジェクションマッピングで投影する、新しい体験。
+            </p>
+            <div className="mt-10 flex items-center justify-center gap-x-6">
+              <Button size="lg" asChild>
+                <Link href="/create">
+                  <Train className="mr-2 h-5 w-5" />
+                  今すぐ始める
+                </Link>
+              </Button>
+              <Button variant="outline" size="lg" asChild>
+                <Link href="#how-it-works">詳しく見る</Link>
+              </Button>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </section>
+
+      {/* How It Works Section */}
+      <section id="how-it-works" className="py-20 sm:py-32">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              HOW IT WORKS
+            </h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              3ステップで簡単に始められます
+            </p>
+          </div>
+
+          <div className="mx-auto mt-16 max-w-5xl">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+              {steps.map((step, index) => (
+                <div key={step.title} className="relative">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <step.icon className="h-8 w-8" />
+                    </div>
+                    <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold md:left-1/2 md:-translate-x-1/2 md:top-0 md:right-auto">
+                      {index + 1}
+                    </div>
+                    <h3 className="mt-6 text-xl font-semibold">{step.title}</h3>
+                    <p className="mt-2 text-muted-foreground">
+                      {step.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Plans Section */}
+      <section className="py-20 sm:py-32 bg-muted/30">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              PLANS
+            </h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              あなたに合ったプランをお選びください
+            </p>
+          </div>
+
+          <div className="mx-auto mt-16 grid max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
+            {plans.map((plan) => (
+              <Card
+                key={plan.name}
+                className={`relative ${
+                  plan.popular ? "border-primary shadow-lg" : ""
+                }`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                      おすすめ
+                    </span>
+                  </div>
+                )}
+                <CardHeader className="text-center">
+                  <CardTitle>{plan.name}</CardTitle>
+                  <CardDescription>{plan.description}</CardDescription>
+                  <div className="mt-4">
+                    <span className="text-4xl font-bold">¥{plan.price}</span>
+                    {plan.price !== "0" && (
+                      <span className="text-muted-foreground">/回</span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-2">
+                        <Check className="h-4 w-4 text-primary" />
+                        <span className="text-sm">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    className="mt-8 w-full"
+                    variant={plan.ctaVariant}
+                    asChild
+                  >
+                    <Link href={plan.href}>{plan.cta}</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 sm:py-32">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              特別な体験を、今すぐ始めよう
+            </h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              あなたの動画が水間鉄道の車両に投影される、
+              <br />
+              忘れられない瞬間を体験してください。
+            </p>
+            <div className="mt-10">
+              <Button size="lg" asChild>
+                <Link href="/create">
+                  <Train className="mr-2 h-5 w-5" />
+                  今すぐ始める
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

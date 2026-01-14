@@ -99,6 +99,9 @@ export function PageContent({ data }) { ... }
 ### Phase 2
 - [物理配信](.docs/spec/phase2/projection-delivery.md)
 
+### メタドキュメント
+- [AIエージェント向けドキュメント作成原則](./agent-doc.md) - CLAUDE.md記述のベストプラクティス
+
 ## 参照実装 (train-canvas)
 
 | ファイル | 用途 |

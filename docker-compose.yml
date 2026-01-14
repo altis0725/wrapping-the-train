@@ -1,0 +1,28 @@
+# Docker Compose for local development
+# PostgreSQL のみコンテナ化し、Next.js はホストで実行
+#
+# Usage:
+#   docker-compose up -d      # DBを起動
+#   npm run dev               # Next.js を起動
+#   docker-compose down       # 停止
+
+services:
+  db:
+    image: postgres:16
+    container_name: wrapping-train-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: wrapping_train
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dev -d wrapping_train"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
