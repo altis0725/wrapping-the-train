@@ -4,8 +4,7 @@ import { jwtVerify } from "jose";
 const COOKIE_NAME = "app_session_id";
 
 // 保護が必要なルート
-// TEMP: LINE認証一時無効化のためコメントアウト
-// const PROTECTED_ROUTES = ["/create", "/mypage", "/reservations"];
+const PROTECTED_ROUTES = ["/create", "/mypage", "/reservations"];
 const ADMIN_ROUTES = ["/admin"];
 const PUBLIC_ROUTES = ["/", "/login", "/terms", "/privacy", "/law", "/contact"];
 
@@ -16,6 +15,15 @@ function getSecretKey() {
     throw new Error("JWT_SECRET must be at least 32 characters");
   }
   return new TextEncoder().encode(secret);
+}
+
+// 管理者OpenIDの一覧を取得（src/lib/auth/admin.ts と同じロジック）
+// Edge Runtimeのため直接インポートせず、同一ロジックを適用
+function getAdminOpenIds(): string[] {
+  return (process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 }
 
 async function verifyToken(token: string): Promise<{ openId: string; name: string } | null> {
@@ -71,26 +79,26 @@ export async function middleware(request: NextRequest) {
   }
 
   // 保護ルートのチェック
-  // TEMP: LINE認証一時無効化のためコメントアウト
-  // const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-  //   pathname.startsWith(route)
-  // );
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
   const isAdminRoute = ADMIN_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
 
-  // TEMP: LINE認証一時無効化（テスト用）
-  // if ((isProtectedRoute || isAdminRoute) && !session) {
-  //   const url = request.nextUrl.clone();
-  //   url.pathname = "/login";
-  //   url.searchParams.set("returnTo", pathname);
-  //   return NextResponse.redirect(url);
-  // }
+  // 未認証ユーザーをログインページへリダイレクト
+  if ((isProtectedRoute || isAdminRoute) && !session) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("returnTo", pathname);
+    return NextResponse.redirect(url);
+  }
 
-  // Admin権限チェック (簡易版 - 環境変数のオーナーIDのみ)
+  // Admin権限チェック (複数管理者対応 - SSOTはsrc/lib/auth/admin.ts と同じロジック)
+  // Note: middlewareはEdge Runtimeのため、直接インポートせず同じロジックを適用
   if (isAdminRoute && session) {
-    const ownerOpenId = process.env.OWNER_OPEN_ID ?? "";
-    if (session.openId !== ownerOpenId) {
+    const adminOpenIds = getAdminOpenIds();
+    if (!adminOpenIds.includes(session.openId)) {
       // Admin権限なし → ホームにリダイレクト
       const url = request.nextUrl.clone();
       url.pathname = "/";

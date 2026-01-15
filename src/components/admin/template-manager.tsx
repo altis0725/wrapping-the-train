@@ -35,8 +35,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff, Upload, Link } from "lucide-react";
 import type { Template } from "@/db/schema";
+import { VideoUploader } from "./video-uploader";
 import { TEMPLATE_CATEGORY } from "@/db/schema";
 import {
   createTemplate,
@@ -65,13 +67,15 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<TemplateInput>({
+  const [formData, setFormData] = useState<TemplateInput & { storageKey?: string }>({
     category: TEMPLATE_CATEGORY.BACKGROUND,
     title: "",
     videoUrl: "",
+    storageKey: "",
     thumbnailUrl: "",
     displayOrder: 0,
   });
+  const [videoInputMode, setVideoInputMode] = useState<"upload" | "url">("upload");
 
   const openCreateDialog = () => {
     setEditingTemplate(null);
@@ -79,9 +83,11 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
       category: TEMPLATE_CATEGORY.BACKGROUND,
       title: "",
       videoUrl: "",
+      storageKey: "",
       thumbnailUrl: "",
       displayOrder: 0,
     });
+    setVideoInputMode("upload");
     setError(null);
     setDialogOpen(true);
   };
@@ -91,10 +97,13 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
     setFormData({
       category: template.category,
       title: template.title,
-      videoUrl: template.videoUrl,
+      videoUrl: template.videoUrl || "",
+      storageKey: template.storageKey || "",
       thumbnailUrl: template.thumbnailUrl || "",
       displayOrder: template.displayOrder,
     });
+    // storageKey がある場合はアップロードモード、なければURLモード
+    setVideoInputMode(template.storageKey ? "upload" : "url");
     setError(null);
     setDialogOpen(true);
   };
@@ -103,11 +112,29 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
     setIsSubmitting(true);
     setError(null);
 
+    // 動画ソースのバリデーション
+    const hasVideo =
+      (videoInputMode === "upload" && formData.storageKey) ||
+      (videoInputMode === "url" && formData.videoUrl);
+
+    if (!hasVideo) {
+      setError("動画ファイルまたは動画URLを指定してください");
+      setIsSubmitting(false);
+      return;
+    }
+
+    // 送信データを準備（選択されたモードに応じて不要なフィールドをクリア）
+    const submitData = {
+      ...formData,
+      storageKey: videoInputMode === "upload" ? formData.storageKey : undefined,
+      videoUrl: videoInputMode === "url" ? formData.videoUrl : undefined,
+    };
+
     let result;
     if (editingTemplate) {
-      result = await updateTemplate(editingTemplate.id, formData);
+      result = await updateTemplate(editingTemplate.id, submitData);
     } else {
-      result = await createTemplate(formData);
+      result = await createTemplate(submitData);
     }
 
     if (result.success) {
@@ -296,14 +323,62 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="videoUrl">動画URL</Label>
-              <Input
-                id="videoUrl"
-                value={formData.videoUrl}
-                onChange={(e) =>
-                  setFormData({ ...formData, videoUrl: e.target.value })
-                }
-              />
+              <Label>動画</Label>
+              <Tabs value={videoInputMode} onValueChange={(v) => setVideoInputMode(v as "upload" | "url")}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="upload" className="gap-2">
+                    <Upload className="h-4 w-4" />
+                    アップロード
+                  </TabsTrigger>
+                  <TabsTrigger value="url" className="gap-2">
+                    <Link className="h-4 w-4" />
+                    URL指定
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="upload" className="mt-3">
+                  {formData.storageKey ? (
+                    <div className="p-3 bg-muted rounded-md">
+                      <p className="text-sm text-muted-foreground">
+                        アップロード済み
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate mt-1">
+                        {formData.storageKey}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => setFormData({ ...formData, storageKey: "" })}
+                      >
+                        別のファイルを選択
+                      </Button>
+                    </div>
+                  ) : (
+                    <VideoUploader
+                      category={formData.category}
+                      templateId={editingTemplate?.id}
+                      onUpload={(storageKey) =>
+                        setFormData({ ...formData, storageKey })
+                      }
+                      onError={(err) => setError(err)}
+                      disabled={isSubmitting}
+                    />
+                  )}
+                </TabsContent>
+                <TabsContent value="url" className="mt-3">
+                  <Input
+                    id="videoUrl"
+                    placeholder="https://example.com/video.mp4"
+                    value={formData.videoUrl}
+                    onChange={(e) =>
+                      setFormData({ ...formData, videoUrl: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    外部URLを直接指定する場合はこちら
+                  </p>
+                </TabsContent>
+              </Tabs>
             </div>
             <div className="space-y-2">
               <Label htmlFor="thumbnailUrl">サムネイルURL</Label>

@@ -163,7 +163,35 @@ async function canDeleteVideo(videoId: number): Promise<{
 
 ## 4. 管理者権限
 
-### admin判定
+### 複数管理者対応
+
+環境変数で複数の管理者を登録可能になりました。
+
+| 環境変数 | 形式 | 説明 |
+|---------|------|------|
+| `ADMIN_OPEN_IDS` | カンマ区切り | 推奨: 複数の管理者OpenIDを指定 |
+| `OWNER_OPEN_ID` | 単一値 | 後方互換: 従来の単一管理者設定 |
+
+### 判定ロジック（SSOT）
+
+管理者判定は `src/lib/auth/admin.ts` に集約（Single Source of Truth）。
+
+```typescript
+// 管理者ID一覧を取得
+function getAdminOpenIds(): string[] {
+  return (process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+// 管理者判定
+function isAdminOpenId(openId: string): boolean {
+  return getAdminOpenIds().includes(openId);
+}
+```
+
+### admin判定（従来方式・DBロール）
 ```typescript
 async function isAdmin(userId: string): Promise<boolean> {
   const user = await db.query.users.findFirst({
@@ -175,6 +203,7 @@ async function isAdmin(userId: string): Promise<boolean> {
 
 ### 管理者専用操作
 - テンプレートCRUD
+- テンプレート動画アップロード
 - 投影スケジュール管理
 - 投影完了マーク
 - 強制キャンセル・返金

@@ -8,6 +8,13 @@
       "when": 1768323368569,
       "tag": "0000_early_nightshade",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1768470934838,
+      "tag": "0001_hot_wendell_rand",
+      "breakpoints": true
     }
   ]
 }

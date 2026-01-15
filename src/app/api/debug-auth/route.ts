@@ -15,14 +15,19 @@ export async function GET(request: NextRequest) {
   }
 
   const jwtSecret = process.env.JWT_SECRET ?? "";
-  const ownerOpenId = process.env.OWNER_OPEN_ID ?? "";
+  const adminOpenIds = (
+    process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? ""
+  )
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   const databaseUrl = process.env.DATABASE_URL ?? "";
   const token = request.cookies.get("app_session_id")?.value;
 
   const debugInfo: Record<string, unknown> = {
     jwtSecretLength: jwtSecret.length,
     jwtSecretFirst10: jwtSecret.substring(0, 10),
-    ownerOpenId,
+    adminOpenIds,
     databaseUrlFirst50: databaseUrl.substring(0, 50),
     tokenReceived: !!token,
     tokenFirst50: token?.substring(0, 50) ?? null,
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
       });
       debugInfo.verificationSuccess = true;
       debugInfo.payload = payload;
-      debugInfo.isAdmin = payload.openId === ownerOpenId;
+      debugInfo.isAdmin = adminOpenIds.includes(payload.openId as string);
 
       // Check if user exists in DB
       const openId = payload.openId as string;

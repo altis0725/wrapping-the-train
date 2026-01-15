@@ -41,7 +41,8 @@ export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   category: integer("category").notNull(), // 1:背景, 2:窓, 3:車輪
   title: varchar("title", { length: 255 }).notNull(),
-  videoUrl: varchar("video_url", { length: 512 }).notNull(),
+  videoUrl: varchar("video_url", { length: 512 }), // 外部URL（後方互換性）
+  storageKey: varchar("storage_key", { length: 512 }), // Railway Storage Bucket のキー
   thumbnailUrl: varchar("thumbnail_url", { length: 512 }),
   displayOrder: integer("display_order").notNull().default(0),
   isActive: integer("is_active").notNull().default(1),

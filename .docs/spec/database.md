@@ -21,10 +21,15 @@
 | id | SERIAL | PK |
 | category | INTEGER | 1:背景/2:窓/3:車輪 |
 | title | VARCHAR(255) | タイトル |
-| video_url | VARCHAR(512) | 動画URL |
+| video_url | VARCHAR(512) | 動画URL (nullable, storage_key優先) |
+| storage_key | VARCHAR(512) | Railway Storage Bucket内のオブジェクトキー (nullable) |
 | thumbnail_url | VARCHAR(512) | サムネイル |
 | display_order | INTEGER | 表示順 |
 | is_active | INTEGER | 有効フラグ |
+
+**備考**:
+- `storage_key`が設定されている場合はRailway Storage Bucketからファイルを取得
+- `storage_key`が未設定の場合は`video_url`を参照（後方互換性）
 
 ### videos
 | カラム | 型 | 説明 |

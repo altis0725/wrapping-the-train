@@ -59,9 +59,9 @@ function getBaseUrl(environment: ShotstackEnvironment): string {
 }
 
 function getMaskUrl(type: "window" | "wheel"): string {
-  const baseUrl = process.env.NEXT_PUBLIC_URL;
-  
-  // NEXT_PUBLIC_URLが設定されていない場合（テスト環境など）は
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  // NEXT_PUBLIC_APP_URLが設定されていない場合（テスト環境など）は
   // GitHub Raw URLを使用する
   if (!baseUrl || baseUrl === "http://localhost:3000") {
     return `${GITHUB_RAW_BASE_URL}/mask_${type}.png`;
