@@ -1,5 +1,14 @@
 # Nixpacks configuration for Railway deployment
-# Installs FFmpeg for video thumbnail generation
+# Includes FFmpeg for video thumbnail generation alongside Node.js
 
 [phases.setup]
-nixPkgs = ['ffmpeg']
+nixPkgs = ['nodejs_20', 'pnpm', 'ffmpeg']
+
+[phases.install]
+cmds = ['pnpm i --frozen-lockfile']
+
+[phases.build]
+cmds = ['pnpm run build']
+
+[start]
+cmd = 'pnpm start'
