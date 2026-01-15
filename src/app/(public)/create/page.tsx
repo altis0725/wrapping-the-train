@@ -32,7 +32,7 @@ export default async function CreatePage() {
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px]" />
       </div>
 
-      <div className="container relative z-10 max-w-6xl px-4 sm:px-6 lg:px-8">
+      <div className="container relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="glass-panel p-8 md:p-12 rounded-3xl border-white/10 animate-fade-in-up shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black/40 backdrop-blur-xl">
           <div className="space-y-12">
             <div className="text-center space-y-4">

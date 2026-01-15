@@ -9,7 +9,6 @@ import {
   boolean,
   jsonb,
   index,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -133,10 +132,8 @@ export const reservations = pgTable(
       .where(sql`${table.status} = 'hold'`),
     index("reservations_idempotency_key_idx").on(table.idempotencyKey),
     index("reservations_updated_at_idx").on(table.updatedAt),
-    // 同一スロットの二重予約防止（有効な予約のみ対象）
-    uniqueIndex("reservations_slot_unique")
-      .on(table.projectionDate, table.slotNumber)
-      .where(sql`${table.status} NOT IN ('expired', 'cancelled')`),
+    // 1スロット4予約まで許可するため、ユニーク制約を削除
+    // 代わりにアプリケーションレベルでカウントチェック
   ]
 );
 

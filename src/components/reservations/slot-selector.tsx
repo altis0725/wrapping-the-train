@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getSlotTimeRange } from "@/lib/constants/slot";
 import type { SlotInfo } from "@/actions/reservation";
-import { Clock, Lock, User } from "lucide-react";
+import { Clock, Lock, User, Check } from "lucide-react";
 
 interface SlotSelectorProps {
   slots: SlotInfo[];
@@ -25,8 +25,10 @@ export function SlotSelector({
       {slots.map((slot) => {
         const isSelected = selectedSlot === slot.slotNumber;
         const isAvailable = slot.status === "available";
-        const isHold = slot.status === "hold";
-        const isReserved = slot.status === "reserved";
+        const isPartial = slot.status === "partial";
+        const isFull = slot.status === "full";
+        const canReserve = isAvailable || isPartial;
+        const remainingSlots = Math.max(0, slot.maxReservations - slot.reservationCount);
 
         return (
           <Button
@@ -34,11 +36,11 @@ export function SlotSelector({
             variant={isSelected ? "default" : "outline"}
             className={cn(
               "h-auto py-4 flex flex-col items-center gap-2",
-              !isAvailable && !slot.isOwn && "opacity-50 cursor-not-allowed",
-              slot.isOwn && isHold && "border-primary"
+              isFull && !slot.isOwn && "opacity-50 cursor-not-allowed",
+              slot.isOwn && "border-primary"
             )}
-            onClick={() => isAvailable && onSelect(slot.slotNumber)}
-            disabled={disabled || (!isAvailable && !slot.isOwn)}
+            onClick={() => canReserve && onSelect(slot.slotNumber)}
+            disabled={disabled || (!canReserve && !slot.isOwn)}
             data-testid="slot"
           >
             <div className="flex items-center gap-2">
@@ -48,36 +50,37 @@ export function SlotSelector({
               </span>
             </div>
 
+            {/* 空き状況表示 */}
             {isAvailable && (
               <Badge variant="success" className="text-xs">
-                予約可能
+                <Check className="h-3 w-3 mr-1" />
+                {remainingSlots}枠空き
               </Badge>
             )}
 
-            {isHold && (
+            {isPartial && (
               <Badge
-                variant={slot.isOwn ? "default" : "warning"}
+                variant={remainingSlots >= 2 ? "success" : "warning"}
                 className="text-xs"
               >
                 {slot.isOwn ? (
                   <span className="flex items-center gap-1">
                     <User className="h-3 w-3" />
-                    あなたが仮押さえ中
+                    予約済み / 残り{remainingSlots}枠
                   </span>
                 ) : (
                   <span className="flex items-center gap-1">
-                    <Lock className="h-3 w-3" />
-                    仮押さえ中
+                    残り{remainingSlots}枠
                   </span>
                 )}
               </Badge>
             )}
 
-            {isReserved && (
+            {isFull && (
               <Badge variant="secondary" className="text-xs">
                 <span className="flex items-center gap-1">
                   <Lock className="h-3 w-3" />
-                  予約済み
+                  {slot.isOwn ? "予約済み / 満席" : "満席"}
                 </span>
               </Badge>
             )}

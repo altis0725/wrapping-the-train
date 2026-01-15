@@ -198,9 +198,9 @@ function VideoCard({
     <Card data-testid="video-item" className="bg-black/40 border-white/10 overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group">
       <CardContent className="p-0">
         <div className="aspect-video bg-black/60 relative overflow-hidden group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all duration-500">
-          {video.template1?.thumbnailUrl ? (
+          {(video.template1?.resolvedThumbnailUrl || video.template1?.thumbnailUrl) ? (
             <img
-              src={video.template1.thumbnailUrl}
+              src={video.template1.resolvedThumbnailUrl ?? video.template1.thumbnailUrl ?? undefined}
               alt="サムネイル"
               className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
@@ -255,7 +255,7 @@ function VideoCard({
             </div>
             {video.expiresAt && (
               <span className="text-orange-400/80">
-                EXP: {format(new Date(video.expiresAt), "MM/dd")}
+                期限: {format(new Date(video.expiresAt), "MM/dd")}
               </span>
             )}
           </div>

@@ -24,17 +24,22 @@ import {
   type ShotstackEnvironment,
   type ShotstackResolution,
 } from "@/lib/shotstack";
-import { getTemplateVideoUrl, getVideoUrl } from "@/lib/storage/resolver";
+import { getTemplateVideoUrl, getVideoUrl, getThumbnailUrl } from "@/lib/storage/resolver";
 import { deleteStorageFile } from "@/lib/storage/upload";
 import { isStorageConfigured } from "@/lib/storage/client";
 
 const MAX_RETRY_COUNT = 3;
 const FREE_VIDEO_EXPIRY_DAYS = 7;
 
+// サムネイルURL解決済みテンプレート型
+export type TemplateWithResolvedThumbnail = Template & {
+  resolvedThumbnailUrl?: string;
+};
+
 export type VideoWithTemplates = Video & {
-  template1?: Template | null;
-  template2?: Template | null;
-  template3?: Template | null;
+  template1?: TemplateWithResolvedThumbnail | null;
+  template2?: TemplateWithResolvedThumbnail | null;
+  template3?: TemplateWithResolvedThumbnail | null;
 };
 
 export type CreateVideoResult =
@@ -451,6 +456,148 @@ export async function deleteVideo(videoId: number): Promise<DeleteVideoResult> {
 }
 
 /**
+ * ホスト名が内部/プライベートIPまたはメタデータエンドポイントかどうかを判定
+ * SSRF対策: 内部ネットワークへのアクセスを遮断
+ *
+ * 注: このチェックはクライアント側 <img src> に渡すURLの簡易検証用。
+ * サーバー側フェッチには使用しない（DNSリバインディング対策が必要な場合は
+ * DNS解決後のIP判定が必要）
+ */
+function isInternalHost(hostname: string): boolean {
+  const lowerHost = hostname.toLowerCase();
+
+  // メタデータエンドポイント（AWS, GCP, Azure等）
+  const metadataHosts = [
+    "169.254.169.254",
+    "metadata.google.internal",
+    "metadata.gcp.internal",
+  ];
+  if (metadataHosts.includes(lowerHost)) {
+    return true;
+  }
+
+  // DNSリバインディング/ワイルドカードDNSサービスを遮断
+  const dnsRebindingPatterns = [
+    ".nip.io",
+    ".xip.io",
+    ".sslip.io",
+    ".localtest.me",
+    ".lvh.me",
+    ".vcap.me",
+  ];
+  if (dnsRebindingPatterns.some((p) => lowerHost.endsWith(p))) {
+    return true;
+  }
+
+  // IPv6 ループバック/リンクローカル/ULA
+  // URL.hostname は IPv6 を角括弧なしで返す（例: "::1", "fe80::1"）
+  if (
+    lowerHost === "::1" ||
+    lowerHost.startsWith("fe80:") ||
+    lowerHost.startsWith("fc") ||
+    lowerHost.startsWith("fd") ||
+    lowerHost.startsWith("::ffff:")
+  ) {
+    return true;
+  }
+
+  // プライベートIPレンジの検出（IPv4）
+  const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+  const match = lowerHost.match(ipv4Pattern);
+  if (match) {
+    const [, a, b] = match.map(Number);
+    // 0.x.x.x, 10.x.x.x, 127.x.x.x, 169.254.x.x, 172.16-31.x.x, 192.168.x.x
+    // 100.64-127.x.x (CGN), 198.18-19.x.x (ベンチマーク), 224-255.x.x.x (マルチキャスト/予約)
+    if (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && b >= 18 && b <= 19) ||
+      a >= 224
+    ) {
+      return true;
+    }
+  }
+
+  // localhost のバリエーション
+  if (
+    lowerHost === "localhost" ||
+    lowerHost.endsWith(".localhost") ||
+    lowerHost.endsWith(".local")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * 外部URLが安全かどうかを検証
+ * SSRF/トラッキング防止のため、https スキームのみ許可し、内部IPを遮断
+ */
+function isValidExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    // httpsスキームのみ許可（http、javascript、data等は拒否）
+    if (parsed.protocol !== "https:") {
+      return false;
+    }
+    // 内部ホスト/プライベートIPへのアクセスを遮断
+    if (isInternalHost(parsed.hostname)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * テンプレートのサムネイルURLを解決
+ * storageKey形式の場合はPresigned URLを生成
+ * キャッシュ付きで重複呼び出しを防止
+ */
+async function resolveTemplateThumbnail(
+  template: Template,
+  cache: Map<number, string | undefined>
+): Promise<TemplateWithResolvedThumbnail> {
+  // キャッシュチェック
+  if (cache.has(template.id)) {
+    return { ...template, resolvedThumbnailUrl: cache.get(template.id) };
+  }
+
+  let resolvedThumbnailUrl: string | undefined;
+  const thumbnailUrl = template.thumbnailUrl;
+
+  if (!thumbnailUrl) {
+    cache.set(template.id, undefined);
+    return { ...template, resolvedThumbnailUrl };
+  }
+
+  // storageKey形式（thumbnails/...）かどうかを判定
+  const normalized = thumbnailUrl.replace(/^\/+/, "");
+  if (normalized.startsWith("thumbnails/")) {
+    try {
+      resolvedThumbnailUrl = await getThumbnailUrl(normalized);
+    } catch {
+      // エラー時は詳細をログ出力しない（内部パス漏洩防止）
+      // フォールバックなし（storageKey形式なので外部URLは期待しない）
+    }
+  } else if (isValidExternalUrl(thumbnailUrl)) {
+    // 外部 URL の場合はhttpsのみ許可
+    resolvedThumbnailUrl = thumbnailUrl;
+  }
+  // 不正なURLの場合は undefined のまま
+
+  cache.set(template.id, resolvedThumbnailUrl);
+  return { ...template, resolvedThumbnailUrl };
+}
+
+/**
  * ユーザーの動画一覧をテンプレート情報付きで取得
  * storageKey がある場合は署名付きURLを生成
  */
@@ -474,6 +621,9 @@ export async function getUserVideosWithTemplates(): Promise<VideoWithTemplates[]
   const allTemplates = await db.select().from(templates);
   const templateMap = new Map(allTemplates.map((t) => [t.id, t]));
 
+  // サムネイルURL解決のキャッシュ（同一テンプレートの重複API呼び出し防止）
+  const thumbnailCache = new Map<number, string | undefined>();
+
   // 署名付きURLを並列生成
   const videosWithUrls = await Promise.all(
     result.map(async ({ video }) => {
@@ -493,12 +643,23 @@ export async function getUserVideosWithTemplates(): Promise<VideoWithTemplates[]
         }
       }
 
+      // テンプレートのサムネイルURLを解決（キャッシュで重複呼び出し防止）
+      const template1 = video.template1Id ? templateMap.get(video.template1Id) : null;
+      const template2 = video.template2Id ? templateMap.get(video.template2Id) : null;
+      const template3 = video.template3Id ? templateMap.get(video.template3Id) : null;
+
+      const [resolvedTemplate1, resolvedTemplate2, resolvedTemplate3] = await Promise.all([
+        template1 ? resolveTemplateThumbnail(template1, thumbnailCache) : null,
+        template2 ? resolveTemplateThumbnail(template2, thumbnailCache) : null,
+        template3 ? resolveTemplateThumbnail(template3, thumbnailCache) : null,
+      ]);
+
       return {
         ...video,
         videoUrl: resolvedVideoUrl,
-        template1: video.template1Id ? templateMap.get(video.template1Id) : null,
-        template2: video.template2Id ? templateMap.get(video.template2Id) : null,
-        template3: video.template3Id ? templateMap.get(video.template3Id) : null,
+        template1: resolvedTemplate1,
+        template2: resolvedTemplate2,
+        template3: resolvedTemplate3,
       };
     })
   );

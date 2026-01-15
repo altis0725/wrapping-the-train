@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { verifySession } from "@/lib/auth/session";
 import { COOKIE_NAME } from "@/lib/auth/constants";
-import { getUserVideos } from "@/actions/video";
+import { getUserVideosWithTemplates } from "@/actions/video";
 import { db } from "@/db";
 import { projectionSchedules } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -52,12 +52,12 @@ export default async function ReservationsPage() {
   }
 
   const [videos, availableDates] = await Promise.all([
-    getUserVideos(),
+    getUserVideosWithTemplates(),
     getAvailableDates(),
   ]);
 
   return (
-    <main className="container max-w-2xl py-8">
+    <main className="container max-w-2xl mx-auto py-8">
       <div className="glass-panel p-8 rounded-2xl border-white/5 animate-fade-in-up">
         <div className="space-y-8">
           <div className="text-center space-y-2">

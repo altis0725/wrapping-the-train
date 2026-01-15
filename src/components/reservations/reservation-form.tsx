@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useTransition, useEffect } from "react";
+import { useState, useCallback, useTransition, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { format, isBefore, startOfDay } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -14,15 +14,17 @@ import {
   getAvailableSlots,
   holdSlot,
   releaseSlot,
+  getReservationById,
   type SlotInfo,
 } from "@/actions/reservation";
 import { createCheckoutSession } from "@/actions/payment";
-import { Loader2, Calendar as CalendarIcon, AlertCircle } from "lucide-react";
-import type { Video } from "@/db/schema";
+import { Loader2, Calendar as CalendarIcon, AlertCircle, Play, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { VideoWithTemplates } from "@/actions/video";
 import type { DayButtonProps } from "react-day-picker";
 
 interface ReservationFormProps {
-  videos: Video[];
+  videos: VideoWithTemplates[];
   availableDates: string[]; // YYYY-MM-DD形式の投影可能日
 }
 
@@ -167,6 +169,55 @@ export function ReservationForm({
     }
   }, [completedVideos, selectedVideoId]);
 
+  // 決済キャンセル時の仮押さえ状態復元（一度だけ実行）
+  const didRestoreRef = useRef(false);
+  const reservationIdParam = searchParams.get("reservationId");
+
+  useEffect(() => {
+    // 既に復元済み、またはキャンセルでない場合はスキップ
+    if (didRestoreRef.current || !paymentCancelled || !reservationIdParam) {
+      return;
+    }
+
+    const reservationId = parseInt(reservationIdParam, 10);
+    if (isNaN(reservationId)) return;
+
+    // 復元処理開始をマーク（二重実行防止）
+    didRestoreRef.current = true;
+
+    let cancelled = false;
+
+    const restoreHold = async () => {
+      try {
+        const reservation = await getReservationById(reservationId);
+
+        if (cancelled) return;
+
+        if (reservation && reservation.status === "hold" && reservation.holdExpiresAt) {
+          const expiresAt = new Date(reservation.holdExpiresAt);
+          // 期限切れチェック
+          if (expiresAt > new Date()) {
+            setHoldReservationId(reservation.id);
+            setHoldExpiresAt(expiresAt);
+            setSelectedVideoId(reservation.videoId);
+          } else {
+            setError("仮押さえの期限が切れました。再度選択してください。");
+          }
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to restore hold:", error);
+        setError("仮押さえ情報の復元に失敗しました。再度選択してください。");
+      }
+    };
+
+    restoreHold();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentCancelled, reservationIdParam]);
+
   const CalendarDayButton = (props: DayButtonProps) => {
     const { day, modifiers, ...buttonProps } = props;
     void day;
@@ -210,16 +261,53 @@ export function ReservationForm({
             </Alert>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {completedVideos.map((video) => (
-                <Button
-                  key={video.id}
-                  variant={selectedVideoId === video.id ? "default" : "outline"}
-                  className="h-auto py-3"
-                  onClick={() => setSelectedVideoId(video.id)}
-                >
-                  動画 #{video.id}
-                </Button>
-              ))}
+              {completedVideos.map((video) => {
+                const isSelected = selectedVideoId === video.id;
+                const thumbnailUrl = video.template1?.resolvedThumbnailUrl;
+
+                return (
+                  <div
+                    key={video.id}
+                    role="button"
+                    tabIndex={0}
+                    className={cn(
+                      "cursor-pointer rounded-lg overflow-hidden border transition-all",
+                      isSelected
+                        ? "ring-2 ring-primary border-primary"
+                        : "border-border hover:border-primary/50"
+                    )}
+                    onClick={() => setSelectedVideoId(video.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedVideoId(video.id);
+                      }
+                    }}
+                  >
+                    <div className="aspect-video bg-black/40 relative overflow-hidden">
+                      {thumbnailUrl ? (
+                        <img
+                          src={thumbnailUrl}
+                          alt={`動画 #${video.id}`}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Play className="h-8 w-8 text-white/30" />
+                        </div>
+                      )}
+                      {isSelected && (
+                        <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2 text-center bg-background/80">
+                      <span className="text-sm font-medium">動画 #{video.id}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
@@ -241,6 +329,15 @@ export function ReservationForm({
             selected={selectedDate}
             onSelect={handleDateSelect}
             locale={ja}
+            modifiers={{
+              available: (date) => {
+                const dateStr = format(date, "yyyy-MM-dd");
+                return availableDateSet.has(dateStr) && !isBefore(date, today);
+              },
+            }}
+            modifiersClassNames={{
+              available: "bg-primary/20 text-primary font-semibold ring-1 ring-primary/30",
+            }}
             disabled={(date) => {
               const dateStr = format(date, "yyyy-MM-dd");
               return (

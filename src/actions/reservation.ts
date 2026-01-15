@@ -8,24 +8,26 @@ import {
   RESERVATION_STATUS,
   type Reservation,
 } from "@/db/schema";
-import { eq, and, sql, inArray, lt } from "drizzle-orm";
+import { eq, and, sql, inArray, lt, or, isNull, gt } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   holdSlotSchema,
   reservationIdSchema,
   type HoldSlotInput,
 } from "@/lib/validations/reservation";
-import { HOLD_EXPIRY_MINUTES, CANCEL_DEADLINE_HOURS, getSlotStartTime } from "@/lib/constants/slot";
+import { HOLD_EXPIRY_MINUTES, CANCEL_DEADLINE_HOURS, getSlotStartTime, MAX_RESERVATIONS_PER_SLOT } from "@/lib/constants/slot";
 import { subHours, isBefore, parseISO, set } from "date-fns";
 import { v4 as uuidv4 } from "uuid";
 
-export type SlotStatus = "available" | "hold" | "reserved";
+export type SlotStatus = "available" | "partial" | "full";
 
 export interface SlotInfo {
   slotNumber: number;
   status: SlotStatus;
-  isOwn: boolean; // 自分の仮押さえかどうか
+  isOwn: boolean; // 自分の仮押さえがあるかどうか
   holdExpiresAt?: Date;
+  reservationCount: number; // 現在の予約数
+  maxReservations: number; // 最大予約数
 }
 
 export type HoldSlotResult =
@@ -65,43 +67,73 @@ export async function getAvailableSlots(date: string): Promise<{
     return { available: false, slots: [] };
   }
 
-  // 該当日の有効な予約を取得
+  const now = new Date();
+
+  // 該当日の有効な予約を取得（期限切れHOLDを除外）
   const activeReservations = await db
     .select()
     .from(reservations)
     .where(
       and(
         eq(reservations.projectionDate, date),
-        inArray(reservations.status, [
-          RESERVATION_STATUS.HOLD,
-          RESERVATION_STATUS.CONFIRMED,
-          RESERVATION_STATUS.COMPLETED,
-        ])
+        or(
+          // CONFIRMED, COMPLETED は常に有効
+          inArray(reservations.status, [
+            RESERVATION_STATUS.CONFIRMED,
+            RESERVATION_STATUS.COMPLETED,
+          ]),
+          // HOLD は期限内のみ有効
+          and(
+            eq(reservations.status, RESERVATION_STATUS.HOLD),
+            or(
+              isNull(reservations.holdExpiresAt),
+              gt(reservations.holdExpiresAt, now)
+            )
+          )
+        )
       )
     );
 
+  // スロットごとの予約数をカウント
+  const slotReservationCounts: Record<number, number> = {};
+  const ownReservationSlots: Set<number> = new Set();
+  const ownHoldExpiresAt: Record<number, Date | undefined> = {};
+
+  for (const reservation of activeReservations) {
+    slotReservationCounts[reservation.slotNumber] =
+      (slotReservationCounts[reservation.slotNumber] || 0) + 1;
+
+    if (user && reservation.userId === user.id) {
+      ownReservationSlots.add(reservation.slotNumber);
+      if (reservation.status === RESERVATION_STATUS.HOLD && reservation.holdExpiresAt) {
+        ownHoldExpiresAt[reservation.slotNumber] = reservation.holdExpiresAt;
+      }
+    }
+  }
+
   // スロット1-4の状態を構築
   const slots: SlotInfo[] = [1, 2, 3, 4].map((slotNumber) => {
-    const reservation = activeReservations.find(
-      (r) => r.slotNumber === slotNumber
-    );
+    const count = slotReservationCounts[slotNumber] || 0;
+    const isOwn = ownReservationSlots.has(slotNumber);
+    const holdExpiresAt = ownHoldExpiresAt[slotNumber];
 
-    if (!reservation) {
-      return { slotNumber, status: "available" as SlotStatus, isOwn: false };
+    let status: SlotStatus;
+    if (count === 0) {
+      status = "available";
+    } else if (count < MAX_RESERVATIONS_PER_SLOT) {
+      status = "partial";
+    } else {
+      status = "full";
     }
 
-    const isOwn = user ? reservation.userId === user.id : false;
-
-    if (reservation.status === RESERVATION_STATUS.HOLD) {
-      return {
-        slotNumber,
-        status: "hold" as SlotStatus,
-        isOwn,
-        holdExpiresAt: reservation.holdExpiresAt || undefined,
-      };
-    }
-
-    return { slotNumber, status: "reserved" as SlotStatus, isOwn };
+    return {
+      slotNumber,
+      status,
+      isOwn,
+      holdExpiresAt,
+      reservationCount: count,
+      maxReservations: MAX_RESERVATIONS_PER_SLOT,
+    };
   });
 
   return { available: true, slots };
@@ -162,30 +194,68 @@ export async function holdSlot(input: HoldSlotInput): Promise<HoldSlotResult> {
   const idempotencyKey = uuidv4();
 
   try {
-    // トランザクションで仮押さえ作成
-    const [reservation] = await db
-      .insert(reservations)
-      .values({
-        userId: user.id,
-        videoId,
-        projectionDate: date,
-        slotNumber,
-        status: RESERVATION_STATUS.HOLD,
-        holdExpiresAt,
-        idempotencyKey,
-      })
-      .returning();
+    // トランザクションで原子的に処理
+    const result = await db.transaction(async (tx) => {
+      // Advisory Lock を取得（date + slotNumber の組み合わせでロック）
+      // 注: hashtext は 32-bit のため理論上衝突の可能性はあるが、
+      // 日付+スロットの組み合わせでは実用上問題ない
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${date}), ${slotNumber})`);
 
-    return { success: true, reservation };
+      const now = new Date();
+
+      // 現在のスロット予約数をチェック（期限切れHOLDを除外）
+      const existingReservations = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.projectionDate, date),
+            eq(reservations.slotNumber, slotNumber),
+            or(
+              // CONFIRMED, COMPLETED は常に有効
+              inArray(reservations.status, [
+                RESERVATION_STATUS.CONFIRMED,
+                RESERVATION_STATUS.COMPLETED,
+              ]),
+              // HOLD は期限内のみ有効
+              and(
+                eq(reservations.status, RESERVATION_STATUS.HOLD),
+                or(
+                  isNull(reservations.holdExpiresAt),
+                  gt(reservations.holdExpiresAt, now)
+                )
+              )
+            )
+          )
+        );
+
+      const currentCount = existingReservations[0]?.count || 0;
+      if (currentCount >= MAX_RESERVATIONS_PER_SLOT) {
+        throw new Error("SLOT_FULL");
+      }
+
+      // 仮押さえ作成
+      const [reservation] = await tx
+        .insert(reservations)
+        .values({
+          userId: user.id,
+          videoId,
+          projectionDate: date,
+          slotNumber,
+          status: RESERVATION_STATUS.HOLD,
+          holdExpiresAt,
+          idempotencyKey,
+        })
+        .returning();
+
+      return reservation;
+    });
+
+    return { success: true, reservation: result };
   } catch (error) {
-    // ユニーク制約違反（二重予約）
-    if (
-      error instanceof Error &&
-      error.message.includes("unique") // PostgreSQLのユニーク制約エラー
-    ) {
-      return { success: false, error: "このスロットは既に予約されています" };
+    if (error instanceof Error && error.message === "SLOT_FULL") {
+      return { success: false, error: "このスロットは満席です" };
     }
-
     console.error("[holdSlot] Error:", error);
     return { success: false, error: "仮押さえに失敗しました" };
   }
