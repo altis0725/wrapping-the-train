@@ -13,6 +13,11 @@ const SHOTSTACK_PROD_URL = "https://api.shotstack.io/v1";
 // 動画の固定長（秒）
 const VIDEO_DURATION = 30;
 
+// テスト環境用のGitHub Raw URL（マスク画像）
+// mainブランチの公開URLを使用（Shotstackからアクセス可能）
+const GITHUB_RAW_BASE_URL =
+  "https://raw.githubusercontent.com/altis0725/wrapping-the-train/main/public/img";
+
 export type ShotstackEnvironment = "stage" | "production";
 
 export type ShotstackRenderStatus =
@@ -54,7 +59,14 @@ function getBaseUrl(environment: ShotstackEnvironment): string {
 }
 
 function getMaskUrl(type: "window" | "wheel"): string {
-  const baseUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_URL;
+  
+  // NEXT_PUBLIC_URLが設定されていない場合（テスト環境など）は
+  // GitHub Raw URLを使用する
+  if (!baseUrl || baseUrl === "http://localhost:3000") {
+    return `${GITHUB_RAW_BASE_URL}/mask_${type}.png`;
+  }
+  
   return `${baseUrl}/img/mask_${type}.png`;
 }
 

@@ -4,7 +4,8 @@
  * テスト実行前に以下を行う:
  * 1. テストユーザーをDBに作成
  * 2. テスト用テンプレート・動画・予約を作成
- * 3. 各ユーザーのStorage Stateファイルを生成
+ * 3. テスト用投影スケジュールを作成
+ * 4. 各ユーザーのStorage Stateファイルを生成
  *
  * アプリコード内にテスト用APIを作らず、DB直接操作 + Cookie注入で実現
  */
@@ -31,6 +32,7 @@ import {
   videos,
   reservations,
   payments,
+  projectionSchedules,
 } from "../src/db/schema";
 
 // 環境変数チェック
@@ -78,7 +80,7 @@ async function globalSetup(config: FullConfig) {
   const connectionString = getEnvOrThrow("DATABASE_URL");
   const client = postgres(connectionString, { prepare: false });
   const db = drizzle(client, {
-    schema: { users, templates, videos, reservations, payments },
+    schema: { users, templates, videos, reservations, payments, projectionSchedules },
   });
 
   try {
@@ -93,6 +95,10 @@ async function globalSetup(config: FullConfig) {
     // 3. テストテンプレートを作成
     console.log("  🎨 Creating test templates...");
     await createTestTemplates(db);
+
+    // 3.5. テスト用投影スケジュールを作成
+    console.log("  📅 Creating test projection schedules...");
+    await createTestProjectionSchedules(db);
 
     // 4. テスト動画・予約を作成
     console.log("  🎬 Creating test videos and reservations...");
@@ -129,11 +135,12 @@ async function cleanupTestData(db: ReturnType<typeof drizzle>) {
     )`
   );
 
-  // テストユーザーの削除
+  // テストユーザーの削除（dev_user_001も含む）
   await db.delete(users).where(
     or(
       eq(users.loginMethod, "test"),
-      sql`${users.openId} LIKE 'test_%'`
+      sql`${users.openId} LIKE 'test_%'`,
+      sql`${users.openId} LIKE 'dev_%'`
     )
   );
 
@@ -172,6 +179,36 @@ async function createTestTemplates(db: ReturnType<typeof drizzle>) {
     await db.insert(templates).values(template);
   }
   console.log(`    Created ${TEST_TEMPLATES.length} test templates`);
+}
+
+async function createTestProjectionSchedules(db: ReturnType<typeof drizzle>) {
+  // 今日から30日分の投影スケジュールを作成
+  const today = new Date();
+  let createdCount = 0;
+
+  for (let i = 0; i < 30; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + i);
+    const dateStr = date.toISOString().split("T")[0];
+
+    // 既存のスケジュールがあるか確認
+    const existing = await db
+      .select()
+      .from(projectionSchedules)
+      .where(eq(projectionSchedules.date, dateStr))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(projectionSchedules).values({
+        date: dateStr,
+        slotsConfig: { slots: [1, 2, 3, 4], maxPerSlot: 1 },
+        isActive: true,
+      });
+      createdCount++;
+    }
+  }
+
+  console.log(`    Created ${createdCount} projection schedules (30 days)`);
 }
 
 async function createTestData(

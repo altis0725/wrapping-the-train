@@ -4,7 +4,8 @@ import { jwtVerify } from "jose";
 const COOKIE_NAME = "app_session_id";
 
 // 保護が必要なルート
-const PROTECTED_ROUTES = ["/create", "/mypage", "/reservations"];
+// TEMP: LINE認証一時無効化のためコメントアウト
+// const PROTECTED_ROUTES = ["/create", "/mypage", "/reservations"];
 const ADMIN_ROUTES = ["/admin"];
 const PUBLIC_ROUTES = ["/", "/login", "/terms", "/privacy", "/law", "/contact"];
 
@@ -70,19 +71,21 @@ export async function middleware(request: NextRequest) {
   }
 
   // 保護ルートのチェック
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    pathname.startsWith(route)
-  );
+  // TEMP: LINE認証一時無効化のためコメントアウト
+  // const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
+  //   pathname.startsWith(route)
+  // );
   const isAdminRoute = ADMIN_ROUTES.some((route) =>
     pathname.startsWith(route)
   );
 
-  if ((isProtectedRoute || isAdminRoute) && !session) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("returnTo", pathname);
-    return NextResponse.redirect(url);
-  }
+  // TEMP: LINE認証一時無効化（テスト用）
+  // if ((isProtectedRoute || isAdminRoute) && !session) {
+  //   const url = request.nextUrl.clone();
+  //   url.pathname = "/login";
+  //   url.searchParams.set("returnTo", pathname);
+  //   return NextResponse.redirect(url);
+  // }
 
   // Admin権限チェック (簡易版 - 環境変数のオーナーIDのみ)
   if (isAdminRoute && session) {

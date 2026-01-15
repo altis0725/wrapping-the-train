@@ -27,7 +27,7 @@ export default async function MyPage() {
   return (
     <div className="container max-w-6xl mx-auto px-4 py-8">
       <div className="glass-panel p-8 rounded-2xl border-white/5 animate-fade-in-up">
-        <h1 className="text-3xl font-bold mb-6 font-orbitron text-glow">マイページ</h1>
+        <h1 className="text-3xl font-bold mb-6 text-glow font-sans tracking-wider">マイページ</h1>
         <MyPageContent
           videos={videos}
           reservations={reservations}
