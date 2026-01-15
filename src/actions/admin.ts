@@ -379,11 +379,12 @@ export async function adminCancelReservation(
         .where(eq(videos.id, currentReservation.videoId));
     }
 
-    // 予約をキャンセル
+    // 予約をキャンセル（idempotencyKeyをnullにして再予約を可能に）
     await db
       .update(reservations)
       .set({
         status: RESERVATION_STATUS.CANCELLED,
+        idempotencyKey: null,
         cancelledAt: new Date(),
         updatedAt: new Date(),
       })

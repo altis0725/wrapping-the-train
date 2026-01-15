@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth/session";
-import { validateTemplateSelection } from "./template";
+import { validateTemplateSelectionBatch } from "./template";
 import {
   createVideoSchema,
   videoIdSchema,
@@ -23,13 +23,18 @@ import {
   mergeVideos,
   type ShotstackEnvironment,
   type ShotstackResolution,
+  type VideoSegment,
 } from "@/lib/shotstack";
 import { getTemplateVideoUrl, getVideoUrl, getThumbnailUrl } from "@/lib/storage/resolver";
 import { deleteStorageFile } from "@/lib/storage/upload";
 import { isStorageConfigured } from "@/lib/storage/client";
+import { isValidExternalUrl } from "@/lib/validations/url";
 
 const MAX_RETRY_COUNT = 3;
 const FREE_VIDEO_EXPIRY_DAYS = 7;
+
+// VideoStatus 型定義（型安全性のため）
+export type VideoStatus = typeof VIDEO_STATUS[keyof typeof VIDEO_STATUS];
 
 // サムネイルURL解決済みテンプレート型
 export type TemplateWithResolvedThumbnail = Template & {
@@ -56,6 +61,7 @@ export type RetryVideoResult =
 
 /**
  * 動画を作成（draft状態で作成し、レンダリングを開始）
+ * 30秒動画：3セグメント×3テンプレート = 9テンプレートIDを受け取る
  */
 export async function createVideo(
   input: CreateVideoInput
@@ -71,33 +77,37 @@ export async function createVideo(
     return { success: false, error: parsed.error.errors[0]?.message || "入力が不正です" };
   }
 
-  const { template1Id, template2Id, template3Id } = parsed.data;
+  const { segments } = parsed.data;
 
-  // テンプレートの検証
-  const validation = await validateTemplateSelection(
-    template1Id,
-    template2Id,
-    template3Id
-  );
+  // 全3セグメントのテンプレートを一括検証（クエリ最適化）
+  const validations = await validateTemplateSelectionBatch(segments);
 
-  if (!validation.valid || !validation.templates) {
-    return { success: false, error: validation.error || "テンプレートの検証に失敗しました" };
+  const failedValidation = validations.find((v) => !v.valid);
+  if (failedValidation) {
+    return { success: false, error: failedValidation.error || "テンプレートの検証に失敗しました" };
   }
-
-  const { background, window, wheel } = validation.templates;
 
   // 有効期限を計算（無料動画は7日間）
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + FREE_VIDEO_EXPIRY_DAYS);
 
-  // 動画レコードを作成（pending状態）
+  // 動画レコードを作成（pending状態）- 9テンプレートIDを保存
   const [video] = await db
     .insert(videos)
     .values({
       userId: user.id,
-      template1Id,
-      template2Id,
-      template3Id,
+      // セグメント1
+      template1Id: segments[0].template1Id,
+      template2Id: segments[0].template2Id,
+      template3Id: segments[0].template3Id,
+      // セグメント2
+      segment2Template1Id: segments[1].template1Id,
+      segment2Template2Id: segments[1].template2Id,
+      segment2Template3Id: segments[1].template3Id,
+      // セグメント3
+      segment3Template1Id: segments[2].template1Id,
+      segment3Template2Id: segments[2].template2Id,
+      segment3Template3Id: segments[2].template3Id,
       status: VIDEO_STATUS.PENDING,
       videoType: "free",
       expiresAt,
@@ -106,20 +116,21 @@ export async function createVideo(
 
   // Shotstackでレンダリング開始
   try {
-    // テンプレート動画のURLを解決（storageKeyがある場合はPresigned URL生成）
-    const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
-      getTemplateVideoUrl(background),
-      getTemplateVideoUrl(window),
-      getTemplateVideoUrl(wheel),
-    ]);
+    // 全セグメントのテンプレート動画URLを解決
+    const videoSegments: VideoSegment[] = await Promise.all(
+      validations.map(async (validation) => {
+        const { background, window, wheel } = validation.templates!;
+        const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
+          getTemplateVideoUrl(background),
+          getTemplateVideoUrl(window),
+          getTemplateVideoUrl(wheel),
+        ]);
+        return { background: backgroundUrl, window: windowUrl, wheel: wheelUrl };
+      })
+    );
 
     const environment: ShotstackEnvironment = "stage"; // 無料動画はsandbox
-    const { renderId } = await mergeVideos(
-      backgroundUrl,
-      windowUrl,
-      wheelUrl,
-      environment
-    );
+    const { renderId } = await mergeVideos(videoSegments, environment);
 
     // render_idとstatus更新
     await db
@@ -200,7 +211,7 @@ export async function getUserVideos(): Promise<Video[]> {
 }
 
 /**
- * 失敗した動画を手動でリトライ
+ * 失敗した動画を手動でリトライ（30秒動画対応）
  */
 export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
   const user = await getCurrentUser();
@@ -239,7 +250,7 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
     };
   }
 
-  // テンプレートを再取得
+  // セグメント1のテンプレートは必須
   if (
     !currentVideo.template1Id ||
     !currentVideo.template2Id ||
@@ -248,17 +259,32 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
     return { success: false, error: "テンプレート情報が不足しています" };
   }
 
-  const validation = await validateTemplateSelection(
-    currentVideo.template1Id,
-    currentVideo.template2Id,
-    currentVideo.template3Id
-  );
+  // 全3セグメントのテンプレートを一括検証（クエリ最適化）
+  // セグメント2,3がnullの場合はセグメント1と同じテンプレートを使用（後方互換性）
+  const segmentConfigs = [
+    {
+      template1Id: currentVideo.template1Id,
+      template2Id: currentVideo.template2Id,
+      template3Id: currentVideo.template3Id,
+    },
+    {
+      template1Id: currentVideo.segment2Template1Id ?? currentVideo.template1Id,
+      template2Id: currentVideo.segment2Template2Id ?? currentVideo.template2Id,
+      template3Id: currentVideo.segment2Template3Id ?? currentVideo.template3Id,
+    },
+    {
+      template1Id: currentVideo.segment3Template1Id ?? currentVideo.template1Id,
+      template2Id: currentVideo.segment3Template2Id ?? currentVideo.template2Id,
+      template3Id: currentVideo.segment3Template3Id ?? currentVideo.template3Id,
+    },
+  ];
 
-  if (!validation.valid || !validation.templates) {
-    return { success: false, error: validation.error || "テンプレートの検証に失敗しました" };
+  const validations = await validateTemplateSelectionBatch(segmentConfigs);
+
+  const failedValidation = validations.find((v) => !v.valid);
+  if (failedValidation) {
+    return { success: false, error: failedValidation.error || "テンプレートの検証に失敗しました" };
   }
-
-  const { background, window, wheel } = validation.templates;
 
   try {
     const environment: ShotstackEnvironment =
@@ -266,20 +292,20 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
     const resolution: ShotstackResolution =
       currentVideo.videoType === "paid" ? "1080" : "sd";
 
-    // テンプレート動画のURLを解決（storageKeyがある場合はPresigned URL生成）
-    const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
-      getTemplateVideoUrl(background),
-      getTemplateVideoUrl(window),
-      getTemplateVideoUrl(wheel),
-    ]);
-
-    const { renderId } = await mergeVideos(
-      backgroundUrl,
-      windowUrl,
-      wheelUrl,
-      environment,
-      resolution
+    // 全セグメントのテンプレート動画URLを解決
+    const videoSegments: VideoSegment[] = await Promise.all(
+      validations.map(async (validation) => {
+        const { background, window, wheel } = validation.templates!;
+        const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
+          getTemplateVideoUrl(background),
+          getTemplateVideoUrl(window),
+          getTemplateVideoUrl(wheel),
+        ]);
+        return { background: backgroundUrl, window: windowUrl, wheel: wheelUrl };
+      })
     );
+
+    const { renderId } = await mergeVideos(videoSegments, environment, resolution);
 
     // ステータスとリトライ回数を更新
     await db
@@ -316,14 +342,22 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
 }
 
 /**
- * 動画のステータスを更新（内部用）
+ * 動画のステータスを更新（内部用・Webhook/Cron専用）
+ *
+ * 注意: この関数は認証チェックを行わない内部用関数です。
+ * 呼び出し元（Webhook, Cron）で適切な認可を行うこと。
+ * - Webhook: Shotstack署名検証後に呼び出し
+ * - Cron: サーバー内部からのみ呼び出し
+ *
+ * @internal この関数はクライアントから直接呼び出さないでください
  */
 export async function updateVideoStatus(
   videoId: number,
-  status: string,
+  status: VideoStatus,
   videoUrl?: string,
   error?: string
 ): Promise<void> {
+  // VideoStatus型で型安全性を確保
   const updateData: Partial<Video> = { status };
 
   if (videoUrl) {
@@ -455,106 +489,7 @@ export async function deleteVideo(videoId: number): Promise<DeleteVideoResult> {
   return { success: true };
 }
 
-/**
- * ホスト名が内部/プライベートIPまたはメタデータエンドポイントかどうかを判定
- * SSRF対策: 内部ネットワークへのアクセスを遮断
- *
- * 注: このチェックはクライアント側 <img src> に渡すURLの簡易検証用。
- * サーバー側フェッチには使用しない（DNSリバインディング対策が必要な場合は
- * DNS解決後のIP判定が必要）
- */
-function isInternalHost(hostname: string): boolean {
-  const lowerHost = hostname.toLowerCase();
-
-  // メタデータエンドポイント（AWS, GCP, Azure等）
-  const metadataHosts = [
-    "169.254.169.254",
-    "metadata.google.internal",
-    "metadata.gcp.internal",
-  ];
-  if (metadataHosts.includes(lowerHost)) {
-    return true;
-  }
-
-  // DNSリバインディング/ワイルドカードDNSサービスを遮断
-  const dnsRebindingPatterns = [
-    ".nip.io",
-    ".xip.io",
-    ".sslip.io",
-    ".localtest.me",
-    ".lvh.me",
-    ".vcap.me",
-  ];
-  if (dnsRebindingPatterns.some((p) => lowerHost.endsWith(p))) {
-    return true;
-  }
-
-  // IPv6 ループバック/リンクローカル/ULA
-  // URL.hostname は IPv6 を角括弧なしで返す（例: "::1", "fe80::1"）
-  if (
-    lowerHost === "::1" ||
-    lowerHost.startsWith("fe80:") ||
-    lowerHost.startsWith("fc") ||
-    lowerHost.startsWith("fd") ||
-    lowerHost.startsWith("::ffff:")
-  ) {
-    return true;
-  }
-
-  // プライベートIPレンジの検出（IPv4）
-  const ipv4Pattern = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-  const match = lowerHost.match(ipv4Pattern);
-  if (match) {
-    const [, a, b] = match.map(Number);
-    // 0.x.x.x, 10.x.x.x, 127.x.x.x, 169.254.x.x, 172.16-31.x.x, 192.168.x.x
-    // 100.64-127.x.x (CGN), 198.18-19.x.x (ベンチマーク), 224-255.x.x.x (マルチキャスト/予約)
-    if (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && b >= 18 && b <= 19) ||
-      a >= 224
-    ) {
-      return true;
-    }
-  }
-
-  // localhost のバリエーション
-  if (
-    lowerHost === "localhost" ||
-    lowerHost.endsWith(".localhost") ||
-    lowerHost.endsWith(".local")
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * 外部URLが安全かどうかを検証
- * SSRF/トラッキング防止のため、https スキームのみ許可し、内部IPを遮断
- */
-function isValidExternalUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    // httpsスキームのみ許可（http、javascript、data等は拒否）
-    if (parsed.protocol !== "https:") {
-      return false;
-    }
-    // 内部ホスト/プライベートIPへのアクセスを遮断
-    if (isInternalHost(parsed.hostname)) {
-      return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
+// isInternalHost, isValidExternalUrl は @/lib/validations/url から import 済み
 
 /**
  * テンプレートのサムネイルURLを解決

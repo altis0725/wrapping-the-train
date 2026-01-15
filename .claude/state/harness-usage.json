@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updatedAt": "2026-01-15T17:43:18.087Z",
+  "updatedAt": "2026-01-15T21:33:44.106Z",
   "skills": {
     "skill-creator": {
       "count": 1,
@@ -11,24 +11,24 @@
       "lastUsed": "2026-01-14T02:57:37.267Z"
     },
     "review": {
-      "count": 1,
-      "lastUsed": "2026-01-13T17:54:49.852Z"
+      "count": 3,
+      "lastUsed": "2026-01-15T21:18:03.516Z"
     },
     "codex-review": {
-      "count": 2,
-      "lastUsed": "2026-01-15T09:45:45.391Z"
+      "count": 5,
+      "lastUsed": "2026-01-15T21:19:04.690Z"
     },
     "llm-debate": {
       "count": 2,
       "lastUsed": "2026-01-14T03:42:39.029Z"
     },
     "setup": {
-      "count": 4,
-      "lastUsed": "2026-01-15T11:18:30.342Z"
+      "count": 10,
+      "lastUsed": "2026-01-15T21:12:35.911Z"
     },
     "impl": {
-      "count": 3,
-      "lastUsed": "2026-01-15T11:24:10.392Z"
+      "count": 8,
+      "lastUsed": "2026-01-15T21:14:45.167Z"
     },
     "harness-review": {
       "count": 1,
@@ -39,8 +39,12 @@
       "lastUsed": "2026-01-15T09:49:32.885Z"
     },
     "verify": {
-      "count": 2,
-      "lastUsed": "2026-01-15T11:28:13.409Z"
+      "count": 5,
+      "lastUsed": "2026-01-15T21:15:34.050Z"
+    },
+    "shotstack": {
+      "count": 1,
+      "lastUsed": "2026-01-15T18:23:01.639Z"
     }
   },
   "commands": {
@@ -53,8 +57,8 @@
       "lastUsed": "2026-01-13T05:50:43.222Z"
     },
     "work": {
-      "count": 15,
-      "lastUsed": "2026-01-15T17:43:18.087Z"
+      "count": 22,
+      "lastUsed": "2026-01-15T21:14:39.986Z"
     },
     "codex-review": {
       "count": 3,
@@ -65,34 +69,34 @@
       "lastUsed": "2026-01-13T15:53:16.288Z"
     },
     "llm-debate": {
-      "count": 3,
-      "lastUsed": "2026-01-14T14:45:37.632Z"
+      "count": 4,
+      "lastUsed": "2026-01-15T18:19:37.293Z"
     },
     "harness-mem": {
       "count": 4,
       "lastUsed": "2026-01-14T03:29:34.042Z"
     },
     "plan-with-agent": {
-      "count": 5,
-      "lastUsed": "2026-01-15T11:18:24.979Z"
+      "count": 11,
+      "lastUsed": "2026-01-15T21:12:31.701Z"
     },
     "harness-review": {
-      "count": 2,
-      "lastUsed": "2026-01-15T10:25:34.539Z"
+      "count": 6,
+      "lastUsed": "2026-01-15T21:19:00.680Z"
     }
   },
   "agents": {
     "Explore": {
-      "count": 19,
-      "lastUsed": "2026-01-15T09:12:35.761Z"
+      "count": 25,
+      "lastUsed": "2026-01-15T20:39:03.221Z"
     },
     "Plan": {
       "count": 2,
       "lastUsed": "2026-01-15T09:16:50.058Z"
     },
     "claude-code-harness:code-reviewer": {
-      "count": 10,
-      "lastUsed": "2026-01-15T10:28:11.935Z"
+      "count": 14,
+      "lastUsed": "2026-01-15T20:53:51.408Z"
     },
     "browser-agent": {
       "count": 8,
@@ -101,9 +105,9 @@
   },
   "hooks": {
     "session-init": {
-      "triggered": 22,
+      "triggered": 30,
       "blocked": 0,
-      "lastTriggered": "2026-01-15T17:37:59.944Z"
+      "lastTriggered": "2026-01-15T21:33:44.105Z"
     },
     "pretooluse-guard": {
       "triggered": 12,

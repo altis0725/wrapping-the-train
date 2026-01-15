@@ -65,11 +65,11 @@ export async function createCheckoutSession(
     return { success: false, error: "この予約は決済できません" };
   }
 
-  // 有効期限チェック
-  if (
-    currentReservation.holdExpiresAt &&
-    currentReservation.holdExpiresAt < new Date()
-  ) {
+  // 有効期限チェック（holdExpiresAtがNULLまたは期限切れは無効）
+  if (!currentReservation.holdExpiresAt) {
+    return { success: false, error: "予約の有効期限が設定されていません" };
+  }
+  if (currentReservation.holdExpiresAt < new Date()) {
     return { success: false, error: "仮押さえの期限が切れています" };
   }
 
@@ -130,90 +130,188 @@ export async function handlePaymentSuccess(
   },
   paymentIntentId: string
 ): Promise<{ success: boolean; error?: string }> {
-  // 冪等性チェック
-  const existingEvent = await db
-    .select()
-    .from(stripeEvents)
-    .where(eq(stripeEvents.eventId, eventId))
-    .limit(1);
-
-  if (existingEvent[0]) {
-    console.log(`[handlePaymentSuccess] Event ${eventId} already processed`);
-    return { success: true };
-  }
-
   const reservationId = parseInt(metadata.reservationId, 10);
   const videoId = parseInt(metadata.videoId, 10);
   const userId = parseInt(metadata.userId, 10);
 
+  // NaNチェック（入力健全性）
+  if (isNaN(reservationId) || isNaN(videoId) || isNaN(userId)) {
+    console.error(
+      `[handlePaymentSuccess] Invalid metadata: reservationId=${metadata.reservationId}, videoId=${metadata.videoId}, userId=${metadata.userId}`
+    );
+    return { success: false, error: "Invalid metadata" };
+  }
+
   try {
     // トランザクションで処理
-    await db.transaction(async (tx) => {
-      // イベント記録（冪等性保証）
-      await tx.insert(stripeEvents).values({
-        eventId,
-        eventType: "checkout.session.completed",
-      });
+    const result = await db.transaction(async (tx) => {
+      // イベント記録（冪等性保証）- 競合時は既に処理済みなのでスキップ
+      const insertResult = await tx
+        .insert(stripeEvents)
+        .values({
+          eventId,
+          eventType: "checkout.session.completed",
+        })
+        .onConflictDoNothing({ target: stripeEvents.eventId })
+        .returning({ id: stripeEvents.id });
 
-      // payment作成
+      // 挿入されなかった = 既に処理済み
+      if (insertResult.length === 0) {
+        console.log(`[handlePaymentSuccess] Event ${eventId} already processed (in transaction)`);
+        return { skipped: true, reason: "already_processed" };
+      }
+
+      // 予約の現在状態を確認（競合対策）
+      const currentReservation = await tx
+        .select()
+        .from(reservations)
+        .where(eq(reservations.id, reservationId))
+        .limit(1);
+
+      if (!currentReservation[0]) {
+        throw new Error("RESERVATION_NOT_FOUND");
+      }
+
+      const reservation = currentReservation[0];
+
+      // metadataとDBの整合性チェック（SSOT: DBの値を信頼）
+      if (reservation.userId !== userId || reservation.videoId !== videoId) {
+        console.warn(
+          `[handlePaymentSuccess] Metadata mismatch: DB(userId=${reservation.userId}, videoId=${reservation.videoId}) vs metadata(userId=${userId}, videoId=${videoId})`
+        );
+        // DBの値をSSOTとして使用
+      }
+
+      // HOLDステータスでない場合は補償ログを記録してスキップ
+      if (reservation.status !== RESERVATION_STATUS.HOLD) {
+        console.warn(
+          `[handlePaymentSuccess] Reservation ${reservationId} is not in HOLD status (current: ${reservation.status}), logging compensation`
+        );
+        // 補償ログを記録（要返金対応）
+        await tx.insert(compensationLogs).values({
+          type: "REFUND",
+          trigger: "PAYMENT_AFTER_STATUS_CHANGE",
+          reservationId,
+          videoId: reservation.videoId,
+          amount: PROJECTION_PRICE,
+          resolvedBy: "SYSTEM",
+          notes: `予約ステータスが${reservation.status}のため決済完了を処理できませんでした。paymentIntentId: ${paymentIntentId}`,
+        });
+        return { skipped: true, reason: "status_not_hold" };
+      }
+
+      // HOLD期限切れまたはholdExpiresAtがNULLの場合は補償ログを記録してスキップ
+      const now = new Date();
+      if (!reservation.holdExpiresAt || reservation.holdExpiresAt < now) {
+        const reason = !reservation.holdExpiresAt ? "holdExpiresAt is NULL" : "HOLD expired";
+        console.warn(
+          `[handlePaymentSuccess] Reservation ${reservationId} HOLD is invalid (${reason}), logging compensation`
+        );
+        // 補償ログを記録（要返金対応）
+        await tx.insert(compensationLogs).values({
+          type: "REFUND",
+          trigger: "PAYMENT_AFTER_HOLD_EXPIRED",
+          reservationId,
+          videoId: reservation.videoId,
+          amount: PROJECTION_PRICE,
+          resolvedBy: "SYSTEM",
+          notes: `${reason}のため決済完了を処理できませんでした。paymentIntentId: ${paymentIntentId}`,
+        });
+        return { skipped: true, reason: "hold_expired" };
+      }
+
+      // 先にreservationをアトミックに更新（WHERE status = HOLDで競合防止）
+      // これにより、同時に複数のWebhookが来ても1つだけが成功する
+      const reservationUpdateResult = await tx
+        .update(reservations)
+        .set({
+          status: RESERVATION_STATUS.CONFIRMED,
+          idempotencyKey: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(reservations.id, reservationId),
+            eq(reservations.status, RESERVATION_STATUS.HOLD)
+          )
+        )
+        .returning({ id: reservations.id });
+
+      // 更新されなかった = 既に別のWebhookで処理済み
+      if (reservationUpdateResult.length === 0) {
+        console.log(
+          `[handlePaymentSuccess] Reservation ${reservationId} already processed by another request`
+        );
+        return { skipped: true, reason: "already_confirmed" };
+      }
+
+      // payment作成（DBのuserIdをSSOTとして使用）
       const [payment] = await tx
         .insert(payments)
         .values({
-          userId,
+          userId: reservation.userId,
           amount: PROJECTION_PRICE,
           stripePaymentIntentId: paymentIntentId,
           status: PAYMENT_STATUS.SUCCEEDED,
         })
         .returning();
 
-      // reservation更新
+      // paymentIdをreservationに紐付け
       await tx
         .update(reservations)
         .set({
-          status: RESERVATION_STATUS.CONFIRMED,
           paymentId: payment.id,
           updatedAt: new Date(),
         })
         .where(eq(reservations.id, reservationId));
 
-      // video更新（有料化 + 有効期限延長）
-      const reservation = await tx
-        .select()
-        .from(reservations)
-        .where(eq(reservations.id, reservationId))
-        .limit(1);
+      // video更新（有料化 + 有効期限延長、DBのvideoIdをSSOTとして使用）
+      const projectionDate = new Date(reservation.projectionDate);
+      const newExpiresAt = addYears(projectionDate, 1);
 
-      if (reservation[0]) {
-        const projectionDate = new Date(reservation[0].projectionDate);
-        const newExpiresAt = addYears(projectionDate, 1);
+      await tx
+        .update(videos)
+        .set({
+          videoType: "paid",
+          expiresAt: newExpiresAt,
+        })
+        .where(eq(videos.id, reservation.videoId));
 
-        await tx
-          .update(videos)
-          .set({
-            videoType: "paid",
-            expiresAt: newExpiresAt,
-          })
-          .where(eq(videos.id, videoId));
-      }
+      return { skipped: false };
     });
 
-    console.log(
-      `[handlePaymentSuccess] Successfully processed reservation ${reservationId}`
-    );
+    if (result.skipped) {
+      // 補償ログが必要なケースとそうでないケースを区別
+      const needsCompensation = result.reason !== "already_processed" && result.reason !== "already_confirmed";
+      if (needsCompensation) {
+        console.log(
+          `[handlePaymentSuccess] Reservation ${reservationId} skipped (reason: ${result.reason}), compensation logged`
+        );
+      } else {
+        console.log(
+          `[handlePaymentSuccess] Reservation ${reservationId} skipped (reason: ${result.reason}), no action needed`
+        );
+      }
+    } else {
+      console.log(
+        `[handlePaymentSuccess] Successfully processed reservation ${reservationId}`
+      );
+    }
     return { success: true };
   } catch (error) {
     console.error("[handlePaymentSuccess] Error:", error);
 
-    // 補償ログに記録
+    // 補償ログに記録（調査が必要なケース - 再実行で解決する可能性あり）
+    // MANUAL: 人手調査が必要。即座にREFUNDではなく、原因調査後に判断する
     try {
       await db.insert(compensationLogs).values({
-        type: "REFUND",
+        type: "MANUAL",
         trigger: "PAYMENT_DB_FAILURE",
         reservationId,
         videoId,
         amount: PROJECTION_PRICE,
         resolvedBy: "SYSTEM",
-        notes: error instanceof Error ? error.message : "Unknown error",
+        notes: `DB処理失敗。要調査: ${error instanceof Error ? error.message : "Unknown error"}. eventId: ${eventId}, paymentIntentId: ${paymentIntentId}`,
       });
     } catch {
       // ログ記録の失敗は無視

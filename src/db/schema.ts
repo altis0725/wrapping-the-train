@@ -57,9 +57,18 @@ export const videos = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id),
+    // セグメント1（0-10秒）
     template1Id: integer("template1_id").references(() => templates.id),
     template2Id: integer("template2_id").references(() => templates.id),
     template3Id: integer("template3_id").references(() => templates.id),
+    // セグメント2（10-20秒）
+    segment2Template1Id: integer("segment2_template1_id").references(() => templates.id),
+    segment2Template2Id: integer("segment2_template2_id").references(() => templates.id),
+    segment2Template3Id: integer("segment2_template3_id").references(() => templates.id),
+    // セグメント3（20-30秒）
+    segment3Template1Id: integer("segment3_template1_id").references(() => templates.id),
+    segment3Template2Id: integer("segment3_template2_id").references(() => templates.id),
+    segment3Template3Id: integer("segment3_template3_id").references(() => templates.id),
     videoUrl: varchar("video_url", { length: 512 }),
     storageKey: varchar("storage_key", { length: 512 }), // Railway Storage Bucket のキー
     videoType: varchar("video_type", { length: 20 }).notNull().default("free"),
@@ -75,6 +84,8 @@ export const videos = pgTable(
     index("videos_expires_idx")
       .on(table.expiresAt)
       .where(sql`${table.expiresAt} IS NOT NULL`),
+    // パフォーマンス改善: getUserVideos() の ORDER BY created_at DESC をカバー
+    index("videos_user_created_idx").on(table.userId, table.createdAt),
   ]
 );
 
@@ -83,6 +94,7 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
     fields: [videos.userId],
     references: [users.id],
   }),
+  // セグメント1
   template1: one(templates, {
     fields: [videos.template1Id],
     references: [templates.id],
@@ -93,6 +105,32 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
   }),
   template3: one(templates, {
     fields: [videos.template3Id],
+    references: [templates.id],
+  }),
+  // セグメント2
+  segment2Template1: one(templates, {
+    fields: [videos.segment2Template1Id],
+    references: [templates.id],
+  }),
+  segment2Template2: one(templates, {
+    fields: [videos.segment2Template2Id],
+    references: [templates.id],
+  }),
+  segment2Template3: one(templates, {
+    fields: [videos.segment2Template3Id],
+    references: [templates.id],
+  }),
+  // セグメント3
+  segment3Template1: one(templates, {
+    fields: [videos.segment3Template1Id],
+    references: [templates.id],
+  }),
+  segment3Template2: one(templates, {
+    fields: [videos.segment3Template2Id],
+    references: [templates.id],
+  }),
+  segment3Template3: one(templates, {
+    fields: [videos.segment3Template3Id],
     references: [templates.id],
   }),
   reservations: many(reservations),
@@ -132,6 +170,8 @@ export const reservations = pgTable(
       .where(sql`${table.status} = 'hold'`),
     index("reservations_idempotency_key_idx").on(table.idempotencyKey),
     index("reservations_updated_at_idx").on(table.updatedAt),
+    // パフォーマンス改善: getUserReservations() の ORDER BY projection_date DESC をカバー
+    index("reservations_user_date_idx").on(table.userId, table.projectionDate),
     // 1スロット4予約まで許可するため、ユニーク制約を削除
     // 代わりにアプリケーションレベルでカウントチェック
   ]

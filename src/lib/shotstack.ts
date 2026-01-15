@@ -2,23 +2,25 @@
  * Shotstack API連携
  *
  * ルママスク合成を使用して3つのテンプレート動画を1つに合成
- * - Track1 (Top): 車輪 + mask_wheel.png
- * - Track2 (Middle): 窓 + mask_window.png
- * - Track3 (Bottom): 背景
+ * - Track1 (Top): 車輪 + mask_wheel_inverted.png
+ * - Track2 (Middle): 窓 + mask_window_inverted.png
+ * - Track3 (Bottom): 背景 + mask_body_inverted.png
  *
  * Shotstackのルママスク仕様:
  * - 白 = 透明（穴が開く）→ 下のレイヤーが見える
  * - 黒 = 不透明（残る）→ そのトラックの動画が見える
  *
  * したがってマスク画像は「見せたい部分を黒、透過させたい部分を白」で作成
- * → mask_wheel_inverted.png, mask_window_inverted.png を使用
+ * → mask_wheel_inverted.png, mask_window_inverted.png, mask_body_inverted.png を使用
  */
 
 const SHOTSTACK_STAGE_URL = "https://api.shotstack.io/stage";
 const SHOTSTACK_PROD_URL = "https://api.shotstack.io/v1";
 
-// 動画の固定長（秒）- テンプレートは10秒
-const VIDEO_DURATION = 10;
+// セグメントの固定長（秒）- 各テンプレートは10秒
+const SEGMENT_DURATION = 10;
+// セグメント数
+const SEGMENT_COUNT = 3;
 
 // テスト環境用のGitHub Raw URL（マスク画像）
 // mainブランチの公開URLを使用（Shotstackからアクセス可能）
@@ -68,7 +70,7 @@ function getBaseUrl(environment: ShotstackEnvironment): string {
   return environment === "production" ? SHOTSTACK_PROD_URL : SHOTSTACK_STAGE_URL;
 }
 
-function getMaskUrl(type: "window" | "wheel"): string {
+function getMaskUrl(type: "window" | "wheel" | "body"): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   // 反転済みマスク画像を使用（白黒反転版）
@@ -84,81 +86,86 @@ function getMaskUrl(type: "window" | "wheel"): string {
 }
 
 /**
- * 3つのテンプレート動画をルママスク合成
- * @param backgroundUrl 背景動画のURL
- * @param windowUrl 窓動画のURL
- * @param wheelUrl 車輪動画のURL
+ * セグメント（10秒区間）の入力型
+ */
+export interface VideoSegment {
+  background: string;
+  window: string;
+  wheel: string;
+}
+
+/**
+ * 3セグメント（30秒）のテンプレート動画をルママスク合成
+ * @param segments 3セグメント分のURL配列
  * @param environment 環境 (stage or production)
  * @param resolution 解像度 (デフォルト: sd)
  */
 export async function mergeVideos(
-  backgroundUrl: string,
-  windowUrl: string,
-  wheelUrl: string,
+  segments: VideoSegment[],
   environment: ShotstackEnvironment = "stage",
   resolution: ShotstackResolution = "sd"
 ): Promise<ShotstackRenderResult> {
+  if (segments.length !== SEGMENT_COUNT) {
+    throw new Error(`セグメント数は${SEGMENT_COUNT}である必要があります`);
+  }
+
   const apiKey = getApiKey(environment);
   const baseUrl = getBaseUrl(environment);
+
+  // 各トラックに3セグメント分のクリップを生成
+  const wheelClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
+  const windowClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
+  const backgroundClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
+
+  segments.forEach((segment, index) => {
+    const startTime = index * SEGMENT_DURATION;
+
+    // 車輪トラック（ルママスク + 動画）
+    wheelClips.push({
+      asset: { type: "luma", src: getMaskUrl("wheel") },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+    wheelClips.push({
+      asset: { type: "video", src: segment.wheel },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+
+    // 窓トラック（ルママスク + 動画）
+    windowClips.push({
+      asset: { type: "luma", src: getMaskUrl("window") },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+    windowClips.push({
+      asset: { type: "video", src: segment.window },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+
+    // 背景トラック（ルママスク + 動画）
+    backgroundClips.push({
+      asset: { type: "luma", src: getMaskUrl("body") },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+    backgroundClips.push({
+      asset: { type: "video", src: segment.background },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+  });
 
   // 3トラック構造: 同一トラック内に luma + video を配置
   // Shotstack の仕様に従い、マスクは同一トラック内のクリップに適用される
   const tracks = [
-    // Top Layer: Wheel with Luma Mask
-    {
-      clips: [
-        {
-          asset: {
-            type: "luma",
-            src: getMaskUrl("wheel"),
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-        {
-          asset: {
-            type: "video",
-            src: wheelUrl,
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-      ],
-    },
-    // Middle Layer: Window with Luma Mask
-    {
-      clips: [
-        {
-          asset: {
-            type: "luma",
-            src: getMaskUrl("window"),
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-        {
-          asset: {
-            type: "video",
-            src: windowUrl,
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-      ],
-    },
-    // Bottom Layer: Background
-    {
-      clips: [
-        {
-          asset: {
-            type: "video",
-            src: backgroundUrl,
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-      ],
-    },
+    // Top Layer: Wheel with Luma Mask（3セグメント分）
+    { clips: wheelClips },
+    // Middle Layer: Window with Luma Mask（3セグメント分）
+    { clips: windowClips },
+    // Bottom Layer: Background（3セグメント分）
+    { clips: backgroundClips },
   ];
 
   const renderPayload = {

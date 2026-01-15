@@ -17,7 +17,7 @@ import {
 } from "@/lib/validations/reservation";
 import { HOLD_EXPIRY_MINUTES, CANCEL_DEADLINE_HOURS, getSlotStartTime, MAX_RESERVATIONS_PER_SLOT } from "@/lib/constants/slot";
 import { subHours, isBefore, parseISO, set } from "date-fns";
-import { v4 as uuidv4 } from "uuid";
+// uuid は使用しない（冪等性キーは決定論的に生成）
 
 export type SlotStatus = "available" | "partial" | "full";
 
@@ -82,13 +82,10 @@ export async function getAvailableSlots(date: string): Promise<{
             RESERVATION_STATUS.CONFIRMED,
             RESERVATION_STATUS.COMPLETED,
           ]),
-          // HOLD は期限内のみ有効
+          // HOLD は期限内のみ有効（holdExpiresAtがNULLの場合は無効として扱う）
           and(
             eq(reservations.status, RESERVATION_STATUS.HOLD),
-            or(
-              isNull(reservations.holdExpiresAt),
-              gt(reservations.holdExpiresAt, now)
-            )
+            gt(reservations.holdExpiresAt, now)
           )
         )
       )
@@ -186,13 +183,6 @@ export async function holdSlot(input: HoldSlotInput): Promise<HoldSlotResult> {
     return { success: false, error: "この日は投影スケジュールがありません" };
   }
 
-  // 仮押さえの有効期限
-  const holdExpiresAt = new Date();
-  holdExpiresAt.setMinutes(holdExpiresAt.getMinutes() + HOLD_EXPIRY_MINUTES);
-
-  // 冪等性キー
-  const idempotencyKey = uuidv4();
-
   try {
     // トランザクションで原子的に処理
     const result = await db.transaction(async (tx) => {
@@ -202,6 +192,38 @@ export async function holdSlot(input: HoldSlotInput): Promise<HoldSlotResult> {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${date}), ${slotNumber})`);
 
       const now = new Date();
+
+      // 冪等性: 同一ユーザー・動画・日付・スロットで既存の有効なHOLDがあれば再利用
+      const existingUserHold = await tx
+        .select()
+        .from(reservations)
+        .where(
+          and(
+            eq(reservations.userId, user.id),
+            eq(reservations.videoId, videoId),
+            eq(reservations.projectionDate, date),
+            eq(reservations.slotNumber, slotNumber),
+            eq(reservations.status, RESERVATION_STATUS.HOLD),
+            gt(reservations.holdExpiresAt, now)
+          )
+        )
+        .limit(1);
+
+      if (existingUserHold[0]) {
+        // 既存のHOLDがあれば、有効期限を延長して返却（冪等性確保）
+        const newExpiresAt = new Date();
+        newExpiresAt.setMinutes(newExpiresAt.getMinutes() + HOLD_EXPIRY_MINUTES);
+
+        await tx
+          .update(reservations)
+          .set({
+            holdExpiresAt: newExpiresAt,
+            updatedAt: now,
+          })
+          .where(eq(reservations.id, existingUserHold[0].id));
+
+        return { ...existingUserHold[0], holdExpiresAt: newExpiresAt };
+      }
 
       // 現在のスロット予約数をチェック（期限切れHOLDを除外）
       const existingReservations = await tx
@@ -217,13 +239,10 @@ export async function holdSlot(input: HoldSlotInput): Promise<HoldSlotResult> {
                 RESERVATION_STATUS.CONFIRMED,
                 RESERVATION_STATUS.COMPLETED,
               ]),
-              // HOLD は期限内のみ有効
+              // HOLD は期限内のみ有効（holdExpiresAtがNULLの場合は無効として扱う）
               and(
                 eq(reservations.status, RESERVATION_STATUS.HOLD),
-                or(
-                  isNull(reservations.holdExpiresAt),
-                  gt(reservations.holdExpiresAt, now)
-                )
+                gt(reservations.holdExpiresAt, now)
               )
             )
           )
@@ -233,6 +252,13 @@ export async function holdSlot(input: HoldSlotInput): Promise<HoldSlotResult> {
       if (currentCount >= MAX_RESERVATIONS_PER_SLOT) {
         throw new Error("SLOT_FULL");
       }
+
+      // 仮押さえの有効期限
+      const holdExpiresAt = new Date();
+      holdExpiresAt.setMinutes(holdExpiresAt.getMinutes() + HOLD_EXPIRY_MINUTES);
+
+      // 冪等性キー: ユーザー・動画・日付・スロットの組み合わせで一意
+      const idempotencyKey = `hold:${user.id}:${videoId}:${date}:${slotNumber}`;
 
       // 仮押さえ作成
       const [reservation] = await tx
@@ -298,11 +324,12 @@ export async function releaseSlot(
     return { success: false, error: "この予約は解放できません" };
   }
 
-  // expired に更新
+  // expired に更新（idempotency_keyをnullにして再利用可能に）
   await db
     .update(reservations)
     .set({
       status: RESERVATION_STATUS.EXPIRED,
+      idempotencyKey: null,
       updatedAt: new Date(),
     })
     .where(eq(reservations.id, reservationId));
@@ -377,11 +404,12 @@ export async function cancelReservation(
     // ここではステータス更新のみ
   }
 
-  // キャンセル状態に更新
+  // キャンセル状態に更新（idempotency_keyをnullにして再利用可能に）
   await db
     .update(reservations)
     .set({
       status: RESERVATION_STATUS.CANCELLED,
+      idempotencyKey: null,
       cancelledAt: new Date(),
       updatedAt: new Date(),
     })
@@ -432,23 +460,30 @@ export async function getReservationById(
 
 /**
  * 期限切れの仮押さえを解放（Cron用）
+ * idempotency_keyをnullにして再予約を可能にする
+ * holdExpiresAtがNULLまたは期限切れのHOLDを解放する
  */
 export async function releaseExpiredHolds(): Promise<number> {
   const now = new Date();
 
+  // 件数のみ取得（全行返却を避けてメモリ負荷を軽減）
   const result = await db
     .update(reservations)
     .set({
       status: RESERVATION_STATUS.EXPIRED,
+      idempotencyKey: null,
       updatedAt: now,
     })
     .where(
       and(
         eq(reservations.status, RESERVATION_STATUS.HOLD),
-        lt(reservations.holdExpiresAt, now)
+        or(
+          isNull(reservations.holdExpiresAt),
+          lt(reservations.holdExpiresAt, now)
+        )
       )
     )
-    .returning();
+    .returning({ id: reservations.id });
 
   return result.length;
 }

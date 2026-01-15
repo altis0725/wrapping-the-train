@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { templates, TEMPLATE_CATEGORY, type Template } from "@/db/schema";
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { getThumbnailUrl } from "@/lib/storage/resolver";
+import { isValidExternalUrl } from "@/lib/validations/url";
 
 export type TemplateWithCategory = Template & {
   categoryName: string;
@@ -58,10 +59,11 @@ async function resolveTemplateThumbnail(
         error instanceof Error ? error.message : error
       );
     }
-  } else {
-    // 外部 URL の場合はそのまま使用
+  } else if (isValidExternalUrl(thumbnailUrl)) {
+    // 外部 URL の場合はhttpsスキームかつ内部ホストでないことを検証
     resolvedThumbnailUrl = thumbnailUrl;
   }
+  // 不正なURLの場合は undefined のまま（XSS/SSRF対策）
   return { ...template, resolvedThumbnailUrl };
 }
 
@@ -215,4 +217,78 @@ export async function validateTemplateSelection(
       wheel: t3,
     },
   };
+}
+
+// セグメントの入力型
+export type SegmentTemplateIds = {
+  template1Id: number;
+  template2Id: number;
+  template3Id: number;
+};
+
+// バリデーション結果型
+export type TemplateValidationResult = {
+  valid: boolean;
+  error?: string;
+  templates?: {
+    background: Template;
+    window: Template;
+    wheel: Template;
+  };
+};
+
+/**
+ * 複数セグメントのテンプレート検証を一括で実行
+ * パフォーマンス最適化: 全IDを一度のクエリで取得
+ */
+export async function validateTemplateSelectionBatch(
+  segments: SegmentTemplateIds[]
+): Promise<TemplateValidationResult[]> {
+  // 全セグメントから全IDを収集（重複除去）
+  const allIds = [...new Set(
+    segments.flatMap((seg) => [seg.template1Id, seg.template2Id, seg.template3Id])
+  )];
+
+  // 一括でテンプレートを取得（1クエリのみ）
+  const templateMap = await getTemplatesByIds(allIds);
+
+  // 各セグメントを検証
+  return segments.map((seg) => {
+    const t1 = templateMap.get(seg.template1Id);
+    const t2 = templateMap.get(seg.template2Id);
+    const t3 = templateMap.get(seg.template3Id);
+
+    if (!t1) {
+      return { valid: false, error: "背景テンプレートが見つかりません" };
+    }
+    if (!t2) {
+      return { valid: false, error: "窓テンプレートが見つかりません" };
+    }
+    if (!t3) {
+      return { valid: false, error: "車輪テンプレートが見つかりません" };
+    }
+
+    if (t1.category !== TEMPLATE_CATEGORY.BACKGROUND) {
+      return { valid: false, error: "背景テンプレートのカテゴリが不正です" };
+    }
+    if (t2.category !== TEMPLATE_CATEGORY.WINDOW) {
+      return { valid: false, error: "窓テンプレートのカテゴリが不正です" };
+    }
+    if (t3.category !== TEMPLATE_CATEGORY.WHEEL) {
+      return { valid: false, error: "車輪テンプレートのカテゴリが不正です" };
+    }
+
+    if (t1.isActive !== 1 || t2.isActive !== 1 || t3.isActive !== 1) {
+      return { valid: false, error: "選択されたテンプレートは現在利用できません" };
+    }
+
+    return {
+      valid: true,
+      templates: {
+        background: t1,
+        window: t2,
+        wheel: t3,
+      },
+    };
+  });
 }
