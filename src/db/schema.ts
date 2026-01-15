@@ -62,6 +62,7 @@ export const videos = pgTable(
     template2Id: integer("template2_id").references(() => templates.id),
     template3Id: integer("template3_id").references(() => templates.id),
     videoUrl: varchar("video_url", { length: 512 }),
+    storageKey: varchar("storage_key", { length: 512 }), // Railway Storage Bucket のキー
     videoType: varchar("video_type", { length: 20 }).notNull().default("free"),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     renderId: varchar("render_id", { length: 255 }),

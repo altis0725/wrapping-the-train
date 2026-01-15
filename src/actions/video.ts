@@ -23,7 +23,9 @@ import {
   mergeVideos,
   type ShotstackEnvironment,
 } from "@/lib/shotstack";
-import { getTemplateVideoUrl } from "@/lib/storage/resolver";
+import { getTemplateVideoUrl, getVideoUrl } from "@/lib/storage/resolver";
+import { deleteStorageFile } from "@/lib/storage/upload";
+import { isStorageConfigured } from "@/lib/storage/client";
 
 const MAX_RETRY_COUNT = 3;
 const FREE_VIDEO_EXPIRY_DAYS = 7;
@@ -385,6 +387,7 @@ export async function canDeleteVideo(
 
 /**
  * 動画を削除
+ * Storage Bucket のファイルも削除（孤児ファイル防止）
  */
 export async function deleteVideo(videoId: number): Promise<DeleteVideoResult> {
   const user = await getCurrentUser();
@@ -406,6 +409,37 @@ export async function deleteVideo(videoId: number): Promise<DeleteVideoResult> {
     return { success: false, error: canDelete.reason || "削除できません" };
   }
 
+  // storageKey を取得（Storage削除用）
+  const video = await db
+    .select({ storageKey: videos.storageKey })
+    .from(videos)
+    .where(and(eq(videos.id, videoId), eq(videos.userId, user.id)))
+    .limit(1);
+
+  // Storage Bucket からファイル削除（存在する場合）
+  if (video[0]?.storageKey && isStorageConfigured()) {
+    // セキュリティ: videos/ プレフィックスのみ許可（任意オブジェクト削除防止）
+    // レガシーキーや異なる拡張子も削除可能に緩和
+    if (video[0].storageKey.startsWith("videos/")) {
+      try {
+        const result = await deleteStorageFile(video[0].storageKey);
+        if (!result.success) {
+          console.error(
+            `[deleteVideo] Storage削除失敗 (video ${videoId}): ${result.error}`
+          );
+          // Storage削除失敗してもDB削除は続行（孤児ファイルは許容）
+        }
+      } catch (error) {
+        console.error(`[deleteVideo] Storage削除エラー (video ${videoId}):`, error);
+        // DB削除は続行
+      }
+    } else {
+      console.warn(
+        `[deleteVideo] Invalid storageKey prefix (video ${videoId}): ${video[0].storageKey}`
+      );
+    }
+  }
+
   // 動画を削除
   await db.delete(videos).where(eq(videos.id, videoId));
 
@@ -414,6 +448,7 @@ export async function deleteVideo(videoId: number): Promise<DeleteVideoResult> {
 
 /**
  * ユーザーの動画一覧をテンプレート情報付きで取得
+ * storageKey がある場合は署名付きURLを生成
  */
 export async function getUserVideosWithTemplates(): Promise<VideoWithTemplates[]> {
   const user = await getCurrentUser();
@@ -435,10 +470,34 @@ export async function getUserVideosWithTemplates(): Promise<VideoWithTemplates[]
   const allTemplates = await db.select().from(templates);
   const templateMap = new Map(allTemplates.map((t) => [t.id, t]));
 
-  return result.map(({ video }) => ({
-    ...video,
-    template1: video.template1Id ? templateMap.get(video.template1Id) : null,
-    template2: video.template2Id ? templateMap.get(video.template2Id) : null,
-    template3: video.template3Id ? templateMap.get(video.template3Id) : null,
-  }));
+  // 署名付きURLを並列生成
+  const videosWithUrls = await Promise.all(
+    result.map(async ({ video }) => {
+      // storageKey または videoUrl から署名付きURLを取得
+      let resolvedVideoUrl = video.videoUrl;
+      if (video.storageKey || video.videoUrl) {
+        try {
+          resolvedVideoUrl = await getVideoUrl({
+            storageKey: video.storageKey,
+            videoUrl: video.videoUrl,
+          });
+        } catch (error) {
+          console.error(
+            `[getUserVideosWithTemplates] URL解決エラー (video ${video.id}):`,
+            error
+          );
+        }
+      }
+
+      return {
+        ...video,
+        videoUrl: resolvedVideoUrl,
+        template1: video.template1Id ? templateMap.get(video.template1Id) : null,
+        template2: video.template2Id ? templateMap.get(video.template2Id) : null,
+        template3: video.template3Id ? templateMap.get(video.template3Id) : null,
+      };
+    })
+  );
+
+  return videosWithUrls;
 }

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updatedAt": "2026-01-14T05:56:32.425Z",
+  "updatedAt": "2026-01-15T17:43:18.087Z",
   "skills": {
     "skill-creator": {
       "count": 1,
@@ -15,16 +15,32 @@
       "lastUsed": "2026-01-13T17:54:49.852Z"
     },
     "codex-review": {
-      "count": 1,
-      "lastUsed": "2026-01-14T02:07:46.131Z"
+      "count": 2,
+      "lastUsed": "2026-01-15T09:45:45.391Z"
     },
     "llm-debate": {
       "count": 2,
       "lastUsed": "2026-01-14T03:42:39.029Z"
     },
     "setup": {
+      "count": 4,
+      "lastUsed": "2026-01-15T11:18:30.342Z"
+    },
+    "impl": {
+      "count": 3,
+      "lastUsed": "2026-01-15T11:24:10.392Z"
+    },
+    "harness-review": {
       "count": 1,
-      "lastUsed": "2026-01-14T05:24:34.218Z"
+      "lastUsed": "2026-01-15T09:39:32.842Z"
+    },
+    "glm-generate": {
+      "count": 1,
+      "lastUsed": "2026-01-15T09:49:32.885Z"
+    },
+    "verify": {
+      "count": 2,
+      "lastUsed": "2026-01-15T11:28:13.409Z"
     }
   },
   "commands": {
@@ -37,8 +53,8 @@
       "lastUsed": "2026-01-13T05:50:43.222Z"
     },
     "work": {
-      "count": 9,
-      "lastUsed": "2026-01-14T05:56:32.425Z"
+      "count": 15,
+      "lastUsed": "2026-01-15T17:43:18.087Z"
     },
     "codex-review": {
       "count": 3,
@@ -49,50 +65,50 @@
       "lastUsed": "2026-01-13T15:53:16.288Z"
     },
     "llm-debate": {
-      "count": 2,
-      "lastUsed": "2026-01-13T17:42:11.252Z"
+      "count": 3,
+      "lastUsed": "2026-01-14T14:45:37.632Z"
     },
     "harness-mem": {
       "count": 4,
       "lastUsed": "2026-01-14T03:29:34.042Z"
     },
     "plan-with-agent": {
-      "count": 2,
-      "lastUsed": "2026-01-14T05:24:28.731Z"
+      "count": 5,
+      "lastUsed": "2026-01-15T11:18:24.979Z"
     },
     "harness-review": {
-      "count": 1,
-      "lastUsed": "2026-01-13T17:54:37.537Z"
+      "count": 2,
+      "lastUsed": "2026-01-15T10:25:34.539Z"
     }
   },
   "agents": {
     "Explore": {
-      "count": 12,
-      "lastUsed": "2026-01-14T05:47:58.751Z"
+      "count": 19,
+      "lastUsed": "2026-01-15T09:12:35.761Z"
     },
     "Plan": {
-      "count": 1,
-      "lastUsed": "2026-01-13T17:37:04.885Z"
+      "count": 2,
+      "lastUsed": "2026-01-15T09:16:50.058Z"
     },
     "claude-code-harness:code-reviewer": {
-      "count": 2,
-      "lastUsed": "2026-01-13T17:56:04.062Z"
+      "count": 10,
+      "lastUsed": "2026-01-15T10:28:11.935Z"
     },
     "browser-agent": {
-      "count": 1,
-      "lastUsed": "2026-01-14T05:12:36.158Z"
+      "count": 8,
+      "lastUsed": "2026-01-14T15:14:57.187Z"
     }
   },
   "hooks": {
     "session-init": {
-      "triggered": 15,
+      "triggered": 22,
       "blocked": 0,
-      "lastTriggered": "2026-01-14T05:38:11.980Z"
+      "lastTriggered": "2026-01-15T17:37:59.944Z"
     },
     "pretooluse-guard": {
-      "triggered": 6,
-      "blocked": 6,
-      "lastTriggered": "2026-01-14T02:15:21.887Z"
+      "triggered": 12,
+      "blocked": 12,
+      "lastTriggered": "2026-01-15T10:20:15.341Z"
     }
   }
 }

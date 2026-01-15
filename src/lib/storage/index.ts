@@ -1,8 +1,9 @@
 // Storage module exports
 export { getStorageClient, getBucketName, isStorageConfigured } from "./client";
 export { uploadTemplateVideo, deleteStorageFile } from "./upload";
+export { downloadAndUploadVideo } from "./video-upload";
 export { generatePresignedUrl } from "./presigned";
-export { getTemplateVideoUrl } from "./resolver";
+export { getTemplateVideoUrl, getVideoUrl } from "./resolver";
 export {
   getOrFetchTemplate,
   invalidateCache,

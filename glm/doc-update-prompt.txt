@@ -1,0 +1,46 @@
+以下の変更内容に基づいて、関連するドキュメントの追加セクションを生成してください。
+既存のドキュメント形式を維持し、追加すべき内容のみを出力してください。
+
+## 変更内容
+
+### 機能1: 複数管理者対応
+- 環境変数 `ADMIN_OPEN_IDS` を追加（カンマ区切りで複数管理者を登録可能）
+- `OWNER_OPEN_ID` は後方互換性のため引き続きサポート
+- 新規ファイル: `src/lib/auth/admin.ts` - 管理者判定のSSoT（Single Source of Truth）
+- 判定ロジック: `getAdminOpenIds()` と `isAdminOpenId(openId)` 関数で統一
+
+### 機能2: テンプレート動画アップロード
+- Railway Storage Bucket（S3互換）への動画アップロード機能
+- DBスキーマ変更: `templates`テーブルに`storage_key`カラム追加（VARCHAR(512), nullable）
+- `video_url`は後方互換性のため引き続きサポート（どちらか一方を使用）
+- 新規環境変数:
+  - `RAILWAY_STORAGE_ENDPOINT` - S3互換エンドポイント
+  - `RAILWAY_BUCKET_NAME` - バケット名
+  - `RAILWAY_ACCESS_KEY_ID` - アクセスキーID（Railway発行）
+  - `RAILWAY_SECRET_ACCESS_KEY` - シークレットアクセスキー（Railway発行）
+
+#### 新規API
+- `POST /api/admin/templates/upload` - テンプレート動画アップロード
+  - 認証: 管理者のみ
+  - リクエスト: FormData (file, category, templateId)
+  - レスポンス: `{ success: true, storageKey: string }`
+  - 制限: 500MB, MP4/MOV のみ
+
+#### 新規モジュール
+- `src/lib/storage/client.ts` - S3クライアント生成
+- `src/lib/storage/upload.ts` - ファイルアップロード処理
+- `src/lib/storage/presigned.ts` - Presigned URL生成（15分有効）
+- `src/lib/storage/resolver.ts` - テンプレートURL解決（storageKey優先、fallback to videoUrl）
+- `src/lib/storage/cache.ts` - LRUキャッシュ（/tmp/templates, 最大5GB）
+
+## 出力形式
+
+各ドキュメントの追加セクションをMarkdown形式で出力してください。
+
+### 1. database.md への追加（templatesテーブルのカラム追加）
+
+### 2. api.md への追加（新規APIエンドポイント）
+
+### 3. integrations.md への追加（Railway Storage Bucket連携）
+
+### 4. security.md への追加（複数管理者認証）
