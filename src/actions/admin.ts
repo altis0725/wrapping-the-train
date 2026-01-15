@@ -18,6 +18,7 @@ import {
 } from "@/db/schema";
 import { eq, and, desc, asc, inArray, sql } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth/session";
+import { isAdminOpenId } from "@/lib/auth/admin";
 import { getStripe } from "@/lib/stripe";
 import { revalidatePath } from "next/cache";
 
@@ -42,14 +43,13 @@ async function logAuditAction(
   }
 }
 
-// Admin権限チェック
+// Admin権限チェック (複数管理者対応 - SSOTはsrc/lib/auth/admin.ts)
 async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error("認証が必要です");
   }
-  const ownerOpenId = process.env.OWNER_OPEN_ID ?? "";
-  if (user.openId !== ownerOpenId) {
+  if (!isAdminOpenId(user.openId)) {
     throw new Error("管理者権限が必要です");
   }
   return user;
@@ -62,7 +62,8 @@ async function requireAdmin() {
 export type TemplateInput = {
   category: number;
   title: string;
-  videoUrl: string;
+  videoUrl?: string;
+  storageKey?: string;
   thumbnailUrl?: string;
   displayOrder?: number;
 };
@@ -76,8 +77,13 @@ export async function createTemplate(input: TemplateInput): Promise<{ success: b
   try {
     const admin = await requireAdmin();
 
-    if (!input.title || !input.videoUrl || !input.category) {
+    // 動画ソースのバリデーション（videoUrl または storageKey のどちらかが必要）
+    if (!input.title || !input.category) {
       return { success: false, error: "必須項目が不足しています" };
+    }
+
+    if (!input.videoUrl && !input.storageKey) {
+      return { success: false, error: "動画URLまたはストレージキーが必要です" };
     }
 
     if (![1, 2, 3].includes(input.category)) {
@@ -87,13 +93,18 @@ export async function createTemplate(input: TemplateInput): Promise<{ success: b
     const [newTemplate] = await db.insert(templates).values({
       category: input.category,
       title: input.title,
-      videoUrl: input.videoUrl,
+      videoUrl: input.videoUrl || null,
+      storageKey: input.storageKey || null,
       thumbnailUrl: input.thumbnailUrl || null,
       displayOrder: input.displayOrder || 0,
       isActive: 1,
     }).returning();
 
-    await logAuditAction(admin.id, "CREATE", "template", newTemplate.id, { title: input.title, category: input.category });
+    await logAuditAction(admin.id, "CREATE", "template", newTemplate.id, {
+      title: input.title,
+      category: input.category,
+      hasStorageKey: !!input.storageKey,
+    });
 
     revalidatePath("/admin/templates");
     return { success: true };
@@ -112,7 +123,8 @@ export async function updateTemplate(
 
     const updateData: Partial<Template> = {};
     if (input.title !== undefined) updateData.title = input.title;
-    if (input.videoUrl !== undefined) updateData.videoUrl = input.videoUrl;
+    if (input.videoUrl !== undefined) updateData.videoUrl = input.videoUrl || null;
+    if (input.storageKey !== undefined) updateData.storageKey = input.storageKey || null;
     if (input.thumbnailUrl !== undefined) updateData.thumbnailUrl = input.thumbnailUrl || null;
     if (input.displayOrder !== undefined) updateData.displayOrder = input.displayOrder;
     if (input.category !== undefined) {
@@ -123,7 +135,10 @@ export async function updateTemplate(
     }
 
     await db.update(templates).set(updateData).where(eq(templates.id, id));
-    await logAuditAction(admin.id, "UPDATE", "template", id, input);
+    await logAuditAction(admin.id, "UPDATE", "template", id, {
+      ...input,
+      hasStorageKey: !!input.storageKey,
+    });
 
     revalidatePath("/admin/templates");
     return { success: true };

@@ -73,7 +73,7 @@ export async function createCheckoutSession(
     return { success: false, error: "仮押さえの期限が切れています" };
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_URL || "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   try {
     const session = await getStripe().checkout.sessions.create({

@@ -11,6 +11,34 @@ updateTemplate(id, data): Promise<void>  // Admin
 deleteTemplate(id): Promise<void>  // Admin
 ```
 
+### テンプレート動画アップロード
+
+#### POST /api/admin/templates/upload
+テンプレート動画をRailway Storage Bucketへアップロードするためのエンドポイント。
+
+- **認証**: 管理者権限必須
+- **Content-Type**: `multipart/form-data`
+
+**リクエストパラメータ (FormData)**:
+| キー | 型 | 必須 | 説明 |
+|------|-----|------|------|
+| file | File | はい | 動画ファイル（MP4/MOV、最大500MB） |
+| category | String | はい | カテゴリ（1:背景/2:窓/3:車輪） |
+| templateId | String | いいえ | テンプレートID（新規作成時は0） |
+
+**レスポンス**:
+```json
+{
+  "success": true,
+  "storageKey": "templates/1/123/1705123456789.mp4"
+}
+```
+
+**制約**:
+- ファイルサイズ上限: 500MB
+- 許可MIMEタイプ: `video/mp4`, `video/quicktime`
+- タイムアウト: 5分
+
 ### 動画
 ```typescript
 // 動画生成（Edge Functionをトリガー）

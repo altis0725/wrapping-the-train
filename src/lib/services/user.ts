@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { users, type User, type NewUser } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { ENV } from "@/lib/auth/constants";
+import { isAdminOpenId } from "@/lib/auth/admin";
 
 export interface UpsertUserData {
   openId: string;
@@ -16,8 +16,8 @@ export interface UpsertUserData {
 export async function upsertUser(data: UpsertUserData): Promise<User> {
   const now = new Date();
 
-  // オーナーの場合は自動的にadminロールを付与
-  const role = data.openId === ENV.ownerOpenId ? "admin" : "user";
+  // 管理者の場合は自動的にadminロールを付与（複数管理者対応）
+  const role = isAdminOpenId(data.openId) ? "admin" : "user";
 
   const values: NewUser = {
     openId: data.openId,
@@ -40,8 +40,8 @@ export async function upsertUser(data: UpsertUserData): Promise<User> {
         loginMethod: data.loginMethod ?? undefined,
         lastSignedIn: now,
         updatedAt: now,
-        // オーナーの場合はロールも更新
-        ...(data.openId === ENV.ownerOpenId && { role: "admin" }),
+        // 管理者の場合はロールも更新（複数管理者対応）
+        ...(isAdminOpenId(data.openId) && { role: "admin" }),
       },
     });
 
@@ -67,11 +67,11 @@ export async function getUserByOpenId(openId: string): Promise<User | null> {
 }
 
 /**
- * ユーザーがadminか判定
+ * ユーザーがadminか判定（複数管理者対応）
  */
 export async function isAdmin(openId: string): Promise<boolean> {
-  // 環境変数のオーナーIDと一致する場合
-  if (openId === ENV.ownerOpenId) {
+  // 環境変数の管理者IDと一致する場合
+  if (isAdminOpenId(openId)) {
     return true;
   }
 

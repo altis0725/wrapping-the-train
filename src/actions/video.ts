@@ -23,6 +23,7 @@ import {
   mergeVideos,
   type ShotstackEnvironment,
 } from "@/lib/shotstack";
+import { getTemplateVideoUrl } from "@/lib/storage/resolver";
 
 const MAX_RETRY_COUNT = 3;
 const FREE_VIDEO_EXPIRY_DAYS = 7;
@@ -97,11 +98,18 @@ export async function createVideo(
 
   // Shotstackでレンダリング開始
   try {
+    // テンプレート動画のURLを解決（storageKeyがある場合はPresigned URL生成）
+    const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
+      getTemplateVideoUrl(background),
+      getTemplateVideoUrl(window),
+      getTemplateVideoUrl(wheel),
+    ]);
+
     const environment: ShotstackEnvironment = "stage"; // 無料動画はsandbox
     const { renderId } = await mergeVideos(
-      background.videoUrl,
-      window.videoUrl,
-      wheel.videoUrl,
+      backgroundUrl,
+      windowUrl,
+      wheelUrl,
       environment
     );
 
@@ -248,10 +256,17 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
     const environment: ShotstackEnvironment =
       currentVideo.videoType === "paid" ? "production" : "stage";
 
+    // テンプレート動画のURLを解決（storageKeyがある場合はPresigned URL生成）
+    const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
+      getTemplateVideoUrl(background),
+      getTemplateVideoUrl(window),
+      getTemplateVideoUrl(wheel),
+    ]);
+
     const { renderId } = await mergeVideos(
-      background.videoUrl,
-      window.videoUrl,
-      wheel.videoUrl,
+      backgroundUrl,
+      windowUrl,
+      wheelUrl,
       environment
     );
 

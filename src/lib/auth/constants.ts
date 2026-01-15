@@ -30,8 +30,22 @@ export const ENV = {
   get appUrl() {
     return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   },
+  /**
+   * 管理者OpenIDの配列を取得
+   * ADMIN_OPEN_IDS（カンマ区切り）を優先、なければOWNER_OPEN_IDにフォールバック
+   */
+  get adminOpenIds(): string[] {
+    const ids = process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? "";
+    return ids
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+  },
+  /**
+   * @deprecated 後方互換性のため維持。adminOpenIds[0]を返す
+   */
   get ownerOpenId() {
-    return process.env.OWNER_OPEN_ID ?? "";
+    return this.adminOpenIds[0] ?? "";
   },
   get isProduction() {
     return process.env.NODE_ENV === "production";

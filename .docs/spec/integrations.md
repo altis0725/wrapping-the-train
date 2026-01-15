@@ -81,7 +81,57 @@ supabase
 
 ---
 
-## 2. Stripe連携
+## 2. Railway Storage Bucket連携
+
+RailwayのS3互換ストレージを利用したテンプレート動画の保存・配信機能。
+
+### 環境変数
+
+```env
+RAILWAY_STORAGE_ENDPOINT=https://storage.railway.app  # S3互換エンドポイント
+RAILWAY_BUCKET_NAME=wrapping-train-templates          # バケット名
+RAILWAY_ACCESS_KEY_ID=xxx                             # Railway発行アクセスキー
+RAILWAY_SECRET_ACCESS_KEY=xxx                         # Railway発行シークレットキー
+```
+
+### モジュール構成
+
+| ファイル | 説明 |
+|---------|------|
+| `src/lib/storage/client.ts` | S3クライアント生成・設定管理 |
+| `src/lib/storage/upload.ts` | ファイルアップロード処理 |
+| `src/lib/storage/presigned.ts` | 署名付きURL生成（有効期限15分） |
+| `src/lib/storage/resolver.ts` | URL解決（storage_key優先、video_urlへfallback） |
+| `src/lib/storage/cache.ts` | LRUキャッシュ（/tmp/templates、最大5GB） |
+
+### アーキテクチャ
+
+```
+[管理画面] ─upload─> [Upload API] ─put─> [Railway Storage Bucket]
+                          │                      │
+                          ▼                      │
+                     [DB: storageKey]            │
+                                                 │
+[動画作成] ─────> [Resolver] ─presigned URL─> [Shotstack]
+                     │
+                     ▼
+              [Cache: /tmp/templates/]
+```
+
+### URL解決ロジック
+
+```typescript
+async function getTemplateVideoUrl(template: Template): Promise<string> {
+  if (template.storageKey && isStorageConfigured()) {
+    return await generatePresignedUrl(template.storageKey);
+  }
+  return template.videoUrl;  // 後方互換性
+}
+```
+
+---
+
+## 3. Stripe連携
 
 ### Checkout Session作成
 
@@ -108,8 +158,8 @@ async function createCheckoutSession(reservationId: number) {
       reservationId: String(reservationId),
       videoId: String(reservation.video_id),
     },
-    success_url: `${process.env.NEXT_PUBLIC_URL}/mypage?success=true`,
-    cancel_url: `${process.env.NEXT_PUBLIC_URL}/reservations?cancelled=true`,
+    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/mypage?success=true`,
+    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/reservations?cancelled=true`,
   });
 
   // locked_at更新
@@ -160,7 +210,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
 ---
 
-## 3. タイムゾーン
+## 4. タイムゾーン
 
 **全システムJST (Asia/Tokyo) 基準**
 
