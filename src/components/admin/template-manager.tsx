@@ -40,6 +40,11 @@ import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff, Upload, Link } from "l
 import type { Template } from "@/db/schema";
 import { VideoUploader } from "./video-uploader";
 import { TEMPLATE_CATEGORY } from "@/db/schema";
+
+// 表示用に解決された URL を持つテンプレート型
+export type TemplateWithResolvedThumbnail = Template & {
+  resolvedThumbnailUrl?: string;
+};
 import {
   createTemplate,
   updateTemplate,
@@ -49,7 +54,7 @@ import {
 } from "@/actions/admin";
 
 interface TemplateManagerProps {
-  templates: Template[];
+  templates: TemplateWithResolvedThumbnail[];
 }
 
 const categoryLabels: Record<number, string> = {
@@ -67,12 +72,13 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState<TemplateInput & { storageKey?: string }>({
+  const [formData, setFormData] = useState<TemplateInput & { storageKey?: string; thumbnailStorageKey?: string }>({
     category: TEMPLATE_CATEGORY.BACKGROUND,
     title: "",
     videoUrl: "",
     storageKey: "",
     thumbnailUrl: "",
+    thumbnailStorageKey: "",
     displayOrder: 0,
   });
   const [videoInputMode, setVideoInputMode] = useState<"upload" | "url">("upload");
@@ -85,6 +91,7 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
       videoUrl: "",
       storageKey: "",
       thumbnailUrl: "",
+      thumbnailStorageKey: "",
       displayOrder: 0,
     });
     setVideoInputMode("upload");
@@ -94,12 +101,15 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
 
   const openEditDialog = (template: Template) => {
     setEditingTemplate(template);
+    // thumbnailUrl が thumbnails/ で始まる場合は storageKey として扱う
+    const isThumbnailStorageKey = template.thumbnailUrl?.startsWith("thumbnails/");
     setFormData({
       category: template.category,
       title: template.title,
       videoUrl: template.videoUrl || "",
       storageKey: template.storageKey || "",
-      thumbnailUrl: template.thumbnailUrl || "",
+      thumbnailUrl: isThumbnailStorageKey ? "" : (template.thumbnailUrl || ""),
+      thumbnailStorageKey: isThumbnailStorageKey ? (template.thumbnailUrl || "") : "",
       displayOrder: template.displayOrder,
     });
     // storageKey がある場合はアップロードモード、なければURLモード
@@ -124,10 +134,13 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
     }
 
     // 送信データを準備（選択されたモードに応じて不要なフィールドをクリア）
+    // thumbnailStorageKey がある場合は thumbnailUrl として保存
     const submitData = {
       ...formData,
       storageKey: videoInputMode === "upload" ? formData.storageKey : undefined,
       videoUrl: videoInputMode === "url" ? formData.videoUrl : undefined,
+      thumbnailUrl: formData.thumbnailStorageKey || formData.thumbnailUrl || undefined,
+      thumbnailStorageKey: undefined, // サーバーには送信しない
     };
 
     let result;
@@ -217,9 +230,9 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                       <TableCell>{template.displayOrder}</TableCell>
                       <TableCell className="font-medium">{template.title}</TableCell>
                       <TableCell>
-                        {template.thumbnailUrl ? (
+                        {template.resolvedThumbnailUrl ? (
                           <img
-                            src={template.thumbnailUrl}
+                            src={template.resolvedThumbnailUrl}
                             alt={template.title}
                             className="w-16 h-10 object-cover rounded"
                           />
@@ -344,11 +357,16 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                       <p className="text-xs text-muted-foreground truncate mt-1">
                         {formData.storageKey}
                       </p>
+                      {formData.thumbnailStorageKey && (
+                        <p className="text-xs text-green-600 mt-1">
+                          サムネイル自動生成済み
+                        </p>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
                         className="mt-2"
-                        onClick={() => setFormData({ ...formData, storageKey: "" })}
+                        onClick={() => setFormData({ ...formData, storageKey: "", thumbnailStorageKey: "" })}
                       >
                         別のファイルを選択
                       </Button>
@@ -357,8 +375,8 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                     <VideoUploader
                       category={formData.category}
                       templateId={editingTemplate?.id}
-                      onUpload={(storageKey) =>
-                        setFormData({ ...formData, storageKey })
+                      onUpload={(storageKey, thumbnailStorageKey) =>
+                        setFormData({ ...formData, storageKey, thumbnailStorageKey: thumbnailStorageKey || "" })
                       }
                       onError={(err) => setError(err)}
                       disabled={isSubmitting}
@@ -382,13 +400,36 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="thumbnailUrl">サムネイルURL</Label>
-              <Input
-                id="thumbnailUrl"
-                value={formData.thumbnailUrl}
-                onChange={(e) =>
-                  setFormData({ ...formData, thumbnailUrl: e.target.value })
-                }
-              />
+              {formData.thumbnailStorageKey ? (
+                <div className="p-3 bg-muted rounded-md">
+                  <p className="text-sm text-green-600">自動生成済み</p>
+                  <p className="text-xs text-muted-foreground truncate mt-1">
+                    {formData.thumbnailStorageKey}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => setFormData({ ...formData, thumbnailStorageKey: "" })}
+                  >
+                    手動で指定する
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    id="thumbnailUrl"
+                    placeholder="https://example.com/thumbnail.jpg"
+                    value={formData.thumbnailUrl}
+                    onChange={(e) =>
+                      setFormData({ ...formData, thumbnailUrl: e.target.value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    動画アップロード時は自動生成されます
+                  </p>
+                </>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="displayOrder">表示順</Label>

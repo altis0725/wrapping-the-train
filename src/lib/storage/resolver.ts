@@ -3,6 +3,26 @@ import { generatePresignedUrl } from "./presigned";
 import { isStorageConfigured } from "./client";
 
 /**
+ * サムネイルの storageKey から URL を生成
+ *
+ * @param storageKey - サムネイルの storageKey (thumbnails/... 形式)
+ * @returns Presigned URL
+ */
+export async function getThumbnailUrl(storageKey: string): Promise<string> {
+  if (!isStorageConfigured()) {
+    throw new Error("ストレージが設定されていません");
+  }
+
+  // セキュリティ: サムネイルプレフィックスのバリデーション
+  // 任意のオブジェクトへの署名発行を防ぐ
+  if (!storageKey.startsWith("thumbnails/")) {
+    throw new Error("無効なサムネイルキーです");
+  }
+
+  return generatePresignedUrl(storageKey, 60 * 60 * 24); // 24時間有効
+}
+
+/**
  * テンプレートの動画 URL を解決
  *
  * - storageKey がある場合: Presigned URL を生成

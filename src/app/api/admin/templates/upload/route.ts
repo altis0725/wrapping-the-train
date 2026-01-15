@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { uploadTemplateVideo } from "@/lib/storage/upload";
 import { isStorageConfigured } from "@/lib/storage/client";
 import { isAdminOpenId } from "@/lib/auth/admin";
+import { generateThumbnail } from "@/lib/storage/thumbnail";
 
 // 最大ファイルサイズ: 500MB
 export const maxDuration = 300; // 5分のタイムアウト
@@ -84,9 +85,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
+    // サムネイル生成
+    let thumbnailStorageKey: string | undefined;
+    if (result.storageKey) {
+      const thumbnailResult = await generateThumbnail(
+        result.storageKey,
+        category,
+        templateId
+      );
+      if (thumbnailResult.success) {
+        thumbnailStorageKey = thumbnailResult.storageKey;
+      } else {
+        // サムネイル生成に失敗してもアップロード自体は成功とする
+        console.warn(
+          "[POST /api/admin/templates/upload] Thumbnail generation failed:",
+          thumbnailResult.error
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       storageKey: result.storageKey,
+      thumbnailStorageKey,
     });
   } catch (error) {
     console.error("[POST /api/admin/templates/upload] Error:", error);
