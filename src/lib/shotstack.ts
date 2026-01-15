@@ -5,13 +5,20 @@
  * - Track1 (Top): 車輪 + mask_wheel.png
  * - Track2 (Middle): 窓 + mask_window.png
  * - Track3 (Bottom): 背景
+ *
+ * Shotstackのルママスク仕様:
+ * - 白 = 透明（穴が開く）→ 下のレイヤーが見える
+ * - 黒 = 不透明（残る）→ そのトラックの動画が見える
+ *
+ * したがってマスク画像は「見せたい部分を黒、透過させたい部分を白」で作成
+ * → mask_wheel_inverted.png, mask_window_inverted.png を使用
  */
 
 const SHOTSTACK_STAGE_URL = "https://api.shotstack.io/stage";
 const SHOTSTACK_PROD_URL = "https://api.shotstack.io/v1";
 
-// 動画の固定長（秒）
-const VIDEO_DURATION = 30;
+// 動画の固定長（秒）- テンプレートは10秒
+const VIDEO_DURATION = 10;
 
 // テスト環境用のGitHub Raw URL（マスク画像）
 // mainブランチの公開URLを使用（Shotstackからアクセス可能）
@@ -39,6 +46,9 @@ export interface ShotstackStatusResult {
   error?: string;
 }
 
+// Shotstack 解像度オプション
+export type ShotstackResolution = "preview" | "mobile" | "sd" | "hd" | "1080";
+
 function getApiKey(environment: ShotstackEnvironment): string {
   const key =
     environment === "production"
@@ -61,27 +71,38 @@ function getBaseUrl(environment: ShotstackEnvironment): string {
 function getMaskUrl(type: "window" | "wheel"): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
+  // 反転済みマスク画像を使用（白黒反転版）
+  const maskFileName = `mask_${type}_inverted.png`;
+
   // NEXT_PUBLIC_APP_URLが設定されていない場合（テスト環境など）は
   // GitHub Raw URLを使用する
   if (!baseUrl || baseUrl === "http://localhost:3000") {
-    return `${GITHUB_RAW_BASE_URL}/mask_${type}.png`;
+    return `${GITHUB_RAW_BASE_URL}/${maskFileName}`;
   }
-  
-  return `${baseUrl}/img/mask_${type}.png`;
+
+  return `${baseUrl}/img/${maskFileName}`;
 }
 
 /**
  * 3つのテンプレート動画をルママスク合成
+ * @param backgroundUrl 背景動画のURL
+ * @param windowUrl 窓動画のURL
+ * @param wheelUrl 車輪動画のURL
+ * @param environment 環境 (stage or production)
+ * @param resolution 解像度 (デフォルト: sd)
  */
 export async function mergeVideos(
   backgroundUrl: string,
   windowUrl: string,
   wheelUrl: string,
-  environment: ShotstackEnvironment = "stage"
+  environment: ShotstackEnvironment = "stage",
+  resolution: ShotstackResolution = "sd"
 ): Promise<ShotstackRenderResult> {
   const apiKey = getApiKey(environment);
   const baseUrl = getBaseUrl(environment);
 
+  // 3トラック構造: 同一トラック内に luma + video を配置
+  // Shotstack の仕様に従い、マスクは同一トラック内のクリップに適用される
   const tracks = [
     // Top Layer: Wheel with Luma Mask
     {
@@ -147,7 +168,7 @@ export async function mergeVideos(
     },
     output: {
       format: "mp4",
-      resolution: "sd",
+      resolution,
     },
   };
 
@@ -182,7 +203,7 @@ export async function mergeVideos(
     }
 
     console.log(
-      `[Shotstack] Render submitted successfully (${environment}):`,
+      `[Shotstack] Render submitted successfully (${environment}, ${resolution}):`,
       renderId
     );
     return { renderId };

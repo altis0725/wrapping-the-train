@@ -3,10 +3,67 @@
 import { db } from "@/db";
 import { templates, TEMPLATE_CATEGORY, type Template } from "@/db/schema";
 import { eq, and, asc, inArray } from "drizzle-orm";
+import { getThumbnailUrl } from "@/lib/storage/resolver";
 
 export type TemplateWithCategory = Template & {
   categoryName: string;
 };
+
+// サムネイルURLが解決されたテンプレート型
+export type TemplateWithResolvedThumbnail = Template & {
+  resolvedThumbnailUrl?: string;
+};
+
+/**
+ * サムネイルURLがストレージキー形式かどうかを判定
+ * storageKey形式: "thumbnails/..." または "/thumbnails/..."
+ */
+function isStorageKeyFormat(url: string): boolean {
+  // 先頭のスラッシュを除いて判定（DBに誤って /thumbnails/... と保存されるケースを考慮）
+  const normalized = url.replace(/^\/+/, "");
+  return normalized.startsWith("thumbnails/");
+}
+
+/**
+ * ストレージキーを正規化（先頭スラッシュを除去）
+ */
+function normalizeStorageKey(url: string): string {
+  return url.replace(/^\/+/, "");
+}
+
+/**
+ * テンプレートのサムネイルURLを解決
+ * storageKey形式の場合はPresigned URLを生成
+ */
+async function resolveTemplateThumbnail(
+  template: Template
+): Promise<TemplateWithResolvedThumbnail> {
+  let resolvedThumbnailUrl: string | undefined;
+  const thumbnailUrl = template.thumbnailUrl;
+
+  if (!thumbnailUrl) {
+    return { ...template, resolvedThumbnailUrl };
+  }
+
+  if (isStorageKeyFormat(thumbnailUrl)) {
+    // storageKey形式の場合はPresigned URLを生成
+    const storageKey = normalizeStorageKey(thumbnailUrl);
+    try {
+      resolvedThumbnailUrl = await getThumbnailUrl(storageKey);
+    } catch (error) {
+      // エラー時はログを出力（storageKey形式なのでフォールバック先がない）
+      console.warn(
+        `[resolveTemplateThumbnail] Failed to resolve thumbnail for template ${template.id}:`,
+        storageKey,
+        error instanceof Error ? error.message : error
+      );
+    }
+  } else {
+    // 外部 URL の場合はそのまま使用
+    resolvedThumbnailUrl = thumbnailUrl;
+  }
+  return { ...template, resolvedThumbnailUrl };
+}
 
 
 /**
@@ -39,6 +96,35 @@ export async function getAllTemplates(): Promise<{
   ]);
 
   return { background, window, wheel };
+}
+
+/**
+ * 全カテゴリのテンプレートをサムネイルURL解決済みで取得
+ * ユーザー向けページで使用
+ */
+export async function getAllTemplatesWithThumbnails(): Promise<{
+  background: TemplateWithResolvedThumbnail[];
+  window: TemplateWithResolvedThumbnail[];
+  wheel: TemplateWithResolvedThumbnail[];
+}> {
+  const [background, window, wheel] = await Promise.all([
+    getTemplatesByCategory(TEMPLATE_CATEGORY.BACKGROUND as 1),
+    getTemplatesByCategory(TEMPLATE_CATEGORY.WINDOW as 2),
+    getTemplatesByCategory(TEMPLATE_CATEGORY.WHEEL as 3),
+  ]);
+
+  // 全テンプレートのサムネイルを並列で解決
+  const [resolvedBackground, resolvedWindow, resolvedWheel] = await Promise.all([
+    Promise.all(background.map(resolveTemplateThumbnail)),
+    Promise.all(window.map(resolveTemplateThumbnail)),
+    Promise.all(wheel.map(resolveTemplateThumbnail)),
+  ]);
+
+  return {
+    background: resolvedBackground,
+    window: resolvedWindow,
+    wheel: resolvedWheel,
+  };
 }
 
 /**

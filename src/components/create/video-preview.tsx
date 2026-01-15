@@ -1,13 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import type { Template } from "@/db/schema";
+import type { TemplateWithResolvedThumbnail } from "@/actions/template";
 
 interface VideoPreviewProps {
   selectedTemplates: {
-    background: Template | null;
-    window: Template | null;
-    wheel: Template | null;
+    background: TemplateWithResolvedThumbnail | null;
+    window: TemplateWithResolvedThumbnail | null;
+    wheel: TemplateWithResolvedThumbnail | null;
   };
   isGenerating?: boolean;
   generatedVideoUrl?: string | null;
@@ -26,7 +26,7 @@ export function VideoPreview({
           src={generatedVideoUrl}
           controls
           className="w-full h-full"
-          poster={selectedTemplates.background?.thumbnailUrl || undefined}
+          poster={selectedTemplates.background?.resolvedThumbnailUrl || undefined}
         />
       </div>
     );
@@ -62,9 +62,9 @@ export function VideoPreview({
   return (
     <div className="aspect-video bg-black rounded-lg overflow-hidden relative">
       {/* 背景レイヤー */}
-      {selectedTemplates.background?.thumbnailUrl && (
+      {selectedTemplates.background?.resolvedThumbnailUrl && (
         <Image
-          src={selectedTemplates.background.thumbnailUrl}
+          src={selectedTemplates.background.resolvedThumbnailUrl}
           alt="背景"
           fill
           className="object-cover"

@@ -22,6 +22,7 @@ import {
 import {
   mergeVideos,
   type ShotstackEnvironment,
+  type ShotstackResolution,
 } from "@/lib/shotstack";
 import { getTemplateVideoUrl, getVideoUrl } from "@/lib/storage/resolver";
 import { deleteStorageFile } from "@/lib/storage/upload";
@@ -257,6 +258,8 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
   try {
     const environment: ShotstackEnvironment =
       currentVideo.videoType === "paid" ? "production" : "stage";
+    const resolution: ShotstackResolution =
+      currentVideo.videoType === "paid" ? "1080" : "sd";
 
     // テンプレート動画のURLを解決（storageKeyがある場合はPresigned URL生成）
     const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
@@ -269,7 +272,8 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
       backgroundUrl,
       windowUrl,
       wheelUrl,
-      environment
+      environment,
+      resolution
     );
 
     // ステータスとリトライ回数を更新

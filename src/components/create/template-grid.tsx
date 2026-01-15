@@ -2,12 +2,12 @@
 
 import { TemplateCard } from "./template-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Template } from "@/db/schema";
+import type { TemplateWithResolvedThumbnail } from "@/actions/template";
 
 interface TemplateGridProps {
-  templates: Template[];
+  templates: TemplateWithResolvedThumbnail[];
   selectedId: number | null;
-  onSelect: (template: Template) => void;
+  onSelect: (template: TemplateWithResolvedThumbnail) => void;
   isLoading?: boolean;
 }
 

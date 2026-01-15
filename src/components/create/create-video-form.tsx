@@ -9,8 +9,8 @@ import { TemplateGrid } from "./template-grid";
 import { VideoPreview } from "./video-preview";
 import { useVideoStatus } from "./use-video-status";
 import { createVideo, retryVideo } from "@/actions/video";
-import type { Template } from "@/db/schema";
 import { VIDEO_STATUS } from "@/db/schema";
+import type { TemplateWithResolvedThumbnail } from "@/actions/template";
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
 const STEPS = [
@@ -21,9 +21,9 @@ const STEPS = [
 
 interface CreateVideoFormProps {
   templates: {
-    background: Template[];
-    window: Template[];
-    wheel: Template[];
+    background: TemplateWithResolvedThumbnail[];
+    window: TemplateWithResolvedThumbnail[];
+    wheel: TemplateWithResolvedThumbnail[];
   };
 }
 
@@ -34,11 +34,11 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   const [isPending, startTransition] = useTransition();
 
   const [currentStep, setCurrentStep] = useState<Step>(0);
-  const [selectedBackground, setSelectedBackground] = useState<Template | null>(
+  const [selectedBackground, setSelectedBackground] = useState<TemplateWithResolvedThumbnail | null>(
     null
   );
-  const [selectedWindow, setSelectedWindow] = useState<Template | null>(null);
-  const [selectedWheel, setSelectedWheel] = useState<Template | null>(null);
+  const [selectedWindow, setSelectedWindow] = useState<TemplateWithResolvedThumbnail | null>(null);
+  const [selectedWheel, setSelectedWheel] = useState<TemplateWithResolvedThumbnail | null>(null);
 
   const [createdVideoId, setCreatedVideoId] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   });
 
   // 現在のステップのテンプレート一覧を取得
-  const getCurrentTemplates = (): Template[] => {
+  const getCurrentTemplates = (): TemplateWithResolvedThumbnail[] => {
     switch (currentStep) {
       case 0:
         return templates.background;
@@ -79,7 +79,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
 
   // テンプレート選択ハンドラ
   const handleSelectTemplate = useCallback(
-    (template: Template) => {
+    (template: TemplateWithResolvedThumbnail) => {
       switch (currentStep) {
         case 0:
           setSelectedBackground(template);

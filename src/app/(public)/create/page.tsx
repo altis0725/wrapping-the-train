@@ -3,7 +3,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { verifySession } from "@/lib/auth/session";
 import { COOKIE_NAME } from "@/lib/auth/constants";
-import { getAllTemplates } from "@/actions/template";
+import { getAllTemplatesWithThumbnails } from "@/actions/template";
 import { CreateVideoForm } from "@/components/create/create-video-form";
 import { cookies } from "next/headers";
 
@@ -22,7 +22,7 @@ export default async function CreatePage() {
     redirect("/login?callbackUrl=/create");
   }
 
-  const templates = await getAllTemplates();
+  const templates = await getAllTemplatesWithThumbnails();
 
   return (
     <main className="relative min-h-screen py-24 sm:py-32 overflow-hidden">
