@@ -98,7 +98,7 @@ export async function createCheckoutSession(
       },
       success_url: `${baseUrl}/mypage?payment=success&reservationId=${reservationId}`,
       cancel_url: `${baseUrl}/reservations?payment=cancelled&reservationId=${reservationId}`,
-      expires_at: Math.floor(Date.now() / 1000) + 15 * 60, // 15分後に期限切れ
+      expires_at: Math.floor(Date.now() / 1000) + 30 * 60, // 30分後に期限切れ（Stripeの最低要件）
     });
 
     // locked_at を更新

@@ -1,1 +1,23 @@
-onlyBuiltDependencies: '["esbuild","sharp","unrs-resolver"]'
+onlyBuiltDependencies:
+  - '"'
+  - ','
+  - '-'
+  - '['
+  - ']'
+  - a
+  - b
+  - d
+  - e
+  - esbuild
+  - h
+  - i
+  - l
+  - n
+  - o
+  - p
+  - r
+  - s
+  - sharp
+  - u
+  - unrs-resolver
+  - v
