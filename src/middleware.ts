@@ -20,7 +20,7 @@ function getSecretKey() {
 // 管理者OpenIDの一覧を取得（src/lib/auth/admin.ts と同じロジック）
 // Edge Runtimeのため直接インポートせず、同一ロジックを適用
 function getAdminOpenIds(): string[] {
-  return (process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? "")
+  return (process.env.ADMIN_OPEN_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
@@ -66,15 +66,12 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const session = token ? await verifyToken(token) : null;
 
-  // DEBUG: 開発環境でのみデバッグ情報をログ
+  // DEBUG: 開発環境でのみデバッグ情報をログ（機密情報は含めない）
   if (process.env.NODE_ENV === "development" && pathname.startsWith("/admin")) {
     console.log("[Middleware Debug]", {
       pathname,
       tokenReceived: !!token,
-      tokenFirst50: token?.substring(0, 50),
       sessionVerified: !!session,
-      sessionOpenId: session?.openId,
-      ownerOpenId: process.env.OWNER_OPEN_ID,
     });
   }
 

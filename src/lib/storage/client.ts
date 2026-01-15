@@ -10,10 +10,7 @@ export function getStorageClient(): S3Client {
   const secretAccessKey = process.env.RAILWAY_SECRET_ACCESS_KEY;
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
-    throw new Error(
-      "Storage 環境変数が設定されていません。" +
-        "RAILWAY_STORAGE_ENDPOINT, RAILWAY_ACCESS_KEY_ID, RAILWAY_SECRET_ACCESS_KEY を設定してください。"
-    );
+    throw new Error("ストレージ設定が不完全です。管理者に連絡してください。");
   }
 
   return new S3Client({

@@ -165,12 +165,11 @@ async function canDeleteVideo(videoId: number): Promise<{
 
 ### 複数管理者対応
 
-環境変数で複数の管理者を登録可能になりました。
+環境変数で複数の管理者を登録可能。
 
 | 環境変数 | 形式 | 説明 |
 |---------|------|------|
-| `ADMIN_OPEN_IDS` | カンマ区切り | 推奨: 複数の管理者OpenIDを指定 |
-| `OWNER_OPEN_ID` | 単一値 | 後方互換: 従来の単一管理者設定 |
+| `ADMIN_OPEN_IDS` | カンマ区切り | 複数の管理者OpenIDを指定（例: `id1,id2,id3`） |
 
 ### 判定ロジック（SSOT）
 
@@ -179,7 +178,7 @@ async function canDeleteVideo(videoId: number): Promise<{
 ```typescript
 // 管理者ID一覧を取得
 function getAdminOpenIds(): string[] {
-  return (process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? "")
+  return (process.env.ADMIN_OPEN_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
