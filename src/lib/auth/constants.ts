@@ -32,20 +32,14 @@ export const ENV = {
   },
   /**
    * 管理者OpenIDの配列を取得
-   * ADMIN_OPEN_IDS（カンマ区切り）を優先、なければOWNER_OPEN_IDにフォールバック
+   * ADMIN_OPEN_IDS（カンマ区切り）から取得
    */
   get adminOpenIds(): string[] {
-    const ids = process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? "";
+    const ids = process.env.ADMIN_OPEN_IDS ?? "";
     return ids
       .split(",")
       .map((id) => id.trim())
       .filter(Boolean);
-  },
-  /**
-   * @deprecated 後方互換性のため維持。adminOpenIds[0]を返す
-   */
-  get ownerOpenId() {
-    return this.adminOpenIds[0] ?? "";
   },
   get isProduction() {
     return process.env.NODE_ENV === "production";

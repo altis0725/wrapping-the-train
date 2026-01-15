@@ -21,10 +21,8 @@ export default async function AdminLayout({
   }
 
   // Admin権限チェック（middlewareで既にチェック済みだが念のため）
-  // 複数管理者対応: ADMIN_OPEN_IDS (カンマ区切り) または OWNER_OPEN_ID をサポート
-  const adminOpenIds = (
-    process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? ""
-  )
+  // 複数管理者対応: ADMIN_OPEN_IDS (カンマ区切り)
+  const adminOpenIds = (process.env.ADMIN_OPEN_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);

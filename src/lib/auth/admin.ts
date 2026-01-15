@@ -2,7 +2,7 @@ import { ENV } from "./constants";
 
 /**
  * 管理者OpenIDの一覧を取得（SSOT）
- * 環境変数 ADMIN_OPEN_IDS または OWNER_OPEN_ID から取得
+ * 環境変数 ADMIN_OPEN_IDS から取得
  * @returns 管理者OpenIDの配列
  */
 export function getAdminOpenIds(): string[] {

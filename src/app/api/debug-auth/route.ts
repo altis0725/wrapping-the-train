@@ -15,9 +15,7 @@ export async function GET(request: NextRequest) {
   }
 
   const jwtSecret = process.env.JWT_SECRET ?? "";
-  const adminOpenIds = (
-    process.env.ADMIN_OPEN_IDS ?? process.env.OWNER_OPEN_ID ?? ""
-  )
+  const adminOpenIds = (process.env.ADMIN_OPEN_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
@@ -25,12 +23,10 @@ export async function GET(request: NextRequest) {
   const token = request.cookies.get("app_session_id")?.value;
 
   const debugInfo: Record<string, unknown> = {
-    jwtSecretLength: jwtSecret.length,
-    jwtSecretFirst10: jwtSecret.substring(0, 10),
-    adminOpenIds,
-    databaseUrlFirst50: databaseUrl.substring(0, 50),
+    jwtSecretIsConfigured: jwtSecret.length >= 32,
+    adminOpenIdsCount: adminOpenIds.length,
+    databaseUrlConfigured: !!databaseUrl,
     tokenReceived: !!token,
-    tokenFirst50: token?.substring(0, 50) ?? null,
   };
 
   if (token && jwtSecret.length >= 32) {
