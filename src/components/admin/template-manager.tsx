@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Table,
   TableBody,
@@ -269,10 +270,13 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                       <TableCell className="font-medium">{template.title}</TableCell>
                       <TableCell>
                         {template.resolvedThumbnailUrl ? (
-                          <img
+                          <Image
                             src={template.resolvedThumbnailUrl}
                             alt={template.title}
-                            className="w-16 h-10 object-cover rounded"
+                            width={64}
+                            height={40}
+                            className="object-cover rounded"
+                            unoptimized={template.resolvedThumbnailUrl.includes("?") || template.resolvedThumbnailUrl.startsWith("/")}
                           />
                         ) : (
                           <span className="text-muted-foreground">-</span>
