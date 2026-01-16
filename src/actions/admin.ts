@@ -197,15 +197,12 @@ export async function toggleTemplateActive(
   }
 }
 
-// カテゴリ名マッピング（TEMPLATE_CATEGORY と SSOT）
-const CATEGORY_LABELS: Record<number, string> = {
-  [TEMPLATE_CATEGORY.BACKGROUND]: "背景",
-  [TEMPLATE_CATEGORY.WINDOW]: "窓",
-  [TEMPLATE_CATEGORY.WHEEL]: "車輪",
-};
-
 // 有効なカテゴリ値の配列（number[] にキャストして includes を使えるように）
 const VALID_CATEGORIES: number[] = Object.values(TEMPLATE_CATEGORY);
+
+// 一括操作の上限
+const MAX_BULK_TEMPLATES = 50;
+const MAX_CATEGORIES = 3;
 
 export async function duplicateTemplate(
   sourceId: number,
@@ -240,7 +237,7 @@ export async function duplicateTemplate(
     // 新しいテンプレートを作成（動画とサムネイルは共有）
     const result = await db.insert(templates).values({
       category: targetCategory,
-      title: `${source.title} (${CATEGORY_LABELS[targetCategory]})`,
+      title: source.title,
       videoUrl: source.videoUrl,
       storageKey: source.storageKey,
       thumbnailUrl: source.thumbnailUrl,
@@ -267,6 +264,152 @@ export async function duplicateTemplate(
   } catch (error) {
     console.error("[duplicateTemplate] Error:", error);
     return { success: false, error: "テンプレートの複製に失敗しました" };
+  }
+}
+
+// 複数テンプレートを複数カテゴリに一括複製
+export async function duplicateTemplates(
+  sourceIds: number[],
+  targetCategories: number[]
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  try {
+    const admin = await requireAdmin();
+
+    // 入力バリデーション
+    if (sourceIds.length === 0) {
+      return { success: false, error: "複製元テンプレートを選択してください" };
+    }
+    if (targetCategories.length === 0) {
+      return { success: false, error: "複製先カテゴリを選択してください" };
+    }
+
+    // 上限チェック
+    if (sourceIds.length > MAX_BULK_TEMPLATES) {
+      return { success: false, error: `一度に複製できるのは最大${MAX_BULK_TEMPLATES}件です` };
+    }
+    if (targetCategories.length > MAX_CATEGORIES) {
+      return { success: false, error: `複製先カテゴリは最大${MAX_CATEGORIES}つまで選択できます` };
+    }
+
+    // カテゴリのバリデーション
+    for (const cat of targetCategories) {
+      if (!VALID_CATEGORIES.includes(cat)) {
+        return { success: false, error: "カテゴリが不正です" };
+      }
+    }
+
+    // 複製元テンプレートを取得
+    const sourceTemplates = await db
+      .select()
+      .from(templates)
+      .where(inArray(templates.id, sourceIds));
+
+    if (sourceTemplates.length === 0) {
+      return { success: false, error: "テンプレートが見つかりません" };
+    }
+
+    // 同一カテゴリ確認（選択されたテンプレートは同じカテゴリでなければならない）
+    const sourceCategory = sourceTemplates[0].category;
+    const allSameCategory = sourceTemplates.every((t) => t.category === sourceCategory);
+    if (!allSameCategory) {
+      return { success: false, error: "選択されたテンプレートは同じカテゴリである必要があります" };
+    }
+
+    // 自分自身のカテゴリへの複製を除外
+    const validTargetCategories = targetCategories.filter((cat) => cat !== sourceCategory);
+    if (validTargetCategories.length === 0) {
+      return { success: false, error: "複製先カテゴリを選択してください（同じカテゴリは除外されます）" };
+    }
+
+    // 一括挿入用のデータを作成
+    const insertData = sourceTemplates.flatMap((source) =>
+      validTargetCategories.map((targetCategory) => ({
+        category: targetCategory,
+        title: source.title,
+        videoUrl: source.videoUrl,
+        storageKey: source.storageKey,
+        thumbnailUrl: source.thumbnailUrl,
+        displayOrder: 0,
+        isActive: 1,
+      }))
+    );
+
+    // 一括挿入
+    const result = await db.insert(templates).values(insertData).returning();
+
+    // 監査ログ
+    await logAuditAction(admin.id, "BULK_DUPLICATE", "template", undefined, {
+      sourceIds,
+      targetCategories: validTargetCategories,
+      createdCount: result.length,
+    });
+
+    revalidatePath("/admin/templates");
+    return { success: true, count: result.length };
+  } catch (error) {
+    console.error("[duplicateTemplates] Error:", error);
+    return { success: false, error: "テンプレートの一括複製に失敗しました" };
+  }
+}
+
+// 複数カテゴリに同時作成
+export async function createTemplates(
+  input: TemplateInput,
+  categories: number[]
+): Promise<{ success: boolean; error?: string; count?: number }> {
+  try {
+    const admin = await requireAdmin();
+
+    // 入力バリデーション
+    if (!input.title) {
+      return { success: false, error: "タイトルは必須です" };
+    }
+    if (!input.videoUrl && !input.storageKey) {
+      return { success: false, error: "動画URLまたはストレージキーが必要です" };
+    }
+    if (categories.length === 0) {
+      return { success: false, error: "カテゴリを選択してください" };
+    }
+
+    // 上限チェック
+    if (categories.length > MAX_CATEGORIES) {
+      return { success: false, error: `カテゴリは最大${MAX_CATEGORIES}つまで選択できます` };
+    }
+
+    // カテゴリのバリデーション
+    for (const cat of categories) {
+      if (!VALID_CATEGORIES.includes(cat)) {
+        return { success: false, error: "カテゴリが不正です" };
+      }
+    }
+
+    // 一括挿入用のデータを作成
+    const insertData = categories.map((category) => ({
+      category,
+      title: input.title,
+      videoUrl: input.videoUrl || null,
+      storageKey: input.storageKey || null,
+      thumbnailUrl: input.thumbnailUrl || null,
+      displayOrder: input.displayOrder || 0,
+      isActive: 1,
+    }));
+
+    // 一括挿入
+    const result = await db.insert(templates).values(insertData).returning();
+
+    // 監査ログ
+    await logAuditAction(admin.id, "BULK_CREATE", "template", undefined, {
+      title: input.title,
+      categories,
+      createdCount: result.length,
+      hasStorageKey: !!input.storageKey,
+    });
+
+    revalidatePath("/admin/templates");
+    return { success: true, count: result.length };
+  } catch (error) {
+    console.error("[createTemplates] Error:", error);
+    return { success: false, error: "テンプレートの作成に失敗しました" };
   }
 }
 
