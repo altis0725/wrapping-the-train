@@ -2,16 +2,16 @@
  * Shotstack API連携
  *
  * ルママスク合成を使用して3つのテンプレート動画を1つに合成
- * - Track1 (Top): 車輪 + mask_wheel_inverted.png
- * - Track2 (Middle): 窓 + mask_window_inverted.png
- * - Track3 (Bottom): 背景 + mask_body_inverted.png
+ * - Track1 (Top): 車輪 + mask_wheel_inverted_v2.png
+ * - Track2 (Middle): 窓 + mask_window_inverted_v2.png
+ * - Track3 (Bottom): 背景 + mask_body_inverted_v2.png
  *
  * Shotstackのルママスク仕様:
  * - 白 = 透明（穴が開く）→ 下のレイヤーが見える
  * - 黒 = 不透明（残る）→ そのトラックの動画が見える
  *
  * したがってマスク画像は「見せたい部分を黒、透過させたい部分を白」で作成
- * → mask_wheel_inverted.png, mask_window_inverted.png, mask_body_inverted.png を使用
+ * → mask_wheel_inverted_v2.png, mask_window_inverted_v2.png, mask_body_inverted_v2.png を使用
  */
 
 const SHOTSTACK_STAGE_URL = "https://api.shotstack.io/stage";
@@ -74,7 +74,8 @@ function getMaskUrl(type: "window" | "wheel" | "body"): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   // 反転済みマスク画像を使用（白黒反転版）
-  const maskFileName = `mask_${type}_inverted.png`;
+  // v2: 2026-01-16 キャッシュ無効化のためリネーム
+  const maskFileName = `mask_${type}_inverted_v2.png`;
 
   // NEXT_PUBLIC_APP_URLが設定されていない場合（テスト環境など）は
   // GitHub Raw URLを使用する
