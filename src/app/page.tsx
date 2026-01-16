@@ -61,10 +61,11 @@ const plans = [
       "投影後1年間の動画保持",
       "現地での投影体験",
     ],
-    cta: "動画を作成して予約",
+    cta: "準備中",
     ctaVariant: "default" as const,
-    href: "/create",
+    href: "#",
     popular: true,
+    disabled: true,
   },
 ];
 
@@ -265,18 +266,27 @@ export default function Home() {
                         </li>
                       ))}
                     </ul>
-                    <Button
-                      className={`w-full h-14 text-lg font-bold transition-all duration-300 bg-opacity-90 hover:bg-opacity-100 font-orbitron tracking-wide
-                        ${plan.popular
-                          ? "bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)] border-none hover:shadow-[0_0_30px_rgba(147,51,234,0.6)]"
-                          : "bg-transparent border border-white/20 hover:border-cyan-400/50 hover:bg-cyan-950/30 text-white"
-                        }`}
-                      asChild
-                    >
-                      <Link href={plan.href}>
-                        {plan.name === "FREE PLAN" ? "START FOR FREE" : "BOOK NOW"}
-                      </Link>
-                    </Button>
+                    {"disabled" in plan && plan.disabled ? (
+                      <Button
+                        className="w-full h-14 text-lg font-bold font-orbitron tracking-wide bg-slate-700 text-slate-400 cursor-not-allowed"
+                        disabled
+                      >
+                        {plan.cta}
+                      </Button>
+                    ) : (
+                      <Button
+                        className={`w-full h-14 text-lg font-bold transition-all duration-300 bg-opacity-90 hover:bg-opacity-100 font-orbitron tracking-wide
+                          ${plan.popular
+                            ? "bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)] border-none hover:shadow-[0_0_30px_rgba(147,51,234,0.6)]"
+                            : "bg-transparent border border-white/20 hover:border-cyan-400/50 hover:bg-cyan-950/30 text-white"
+                          }`}
+                        asChild
+                      >
+                        <Link href={plan.href}>
+                          {plan.name === "FREE PLAN" ? "START FOR FREE" : "BOOK NOW"}
+                        </Link>
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               </motion.div>
