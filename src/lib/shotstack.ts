@@ -19,8 +19,8 @@ const SHOTSTACK_PROD_URL = "https://api.shotstack.io/v1";
 
 // セグメントの固定長（秒）- 各テンプレートは10秒
 const SEGMENT_DURATION = 10;
-// セグメント数
-const SEGMENT_COUNT = 3;
+// セグメント数（60秒動画）
+const SEGMENT_COUNT = 6;
 
 // テスト環境用のGitHub Raw URL（マスク画像）
 // mainブランチの公開URLを使用（Shotstackからアクセス可能）
@@ -87,7 +87,18 @@ function getMaskUrl(type: "window" | "wheel" | "body"): string {
 }
 
 /**
- * セグメント（10秒区間）の入力型
+ * 60秒動画の入力型（新仕様）
+ * 背景6個 + 窓1個（6回ループ） + 車輪1個（6回ループ）
+ */
+export interface VideoInput {
+  backgrounds: string[];  // 6個の背景動画URL
+  window: string;         // 窓動画URL（6回ループ）
+  wheel: string;          // 車輪動画URL（6回ループ）
+}
+
+/**
+ * セグメント（10秒区間）の入力型（旧仕様・後方互換性）
+ * @deprecated 新しいVideoInputを使用してください
  */
 export interface VideoSegment {
   background: string;
@@ -96,76 +107,80 @@ export interface VideoSegment {
 }
 
 /**
- * 3セグメント（30秒）のテンプレート動画をルママスク合成
- * @param segments 3セグメント分のURL配列
+ * 6セグメント（60秒）のテンプレート動画をルママスク合成
+ * 背景: 6種類の動画（各10秒）
+ * 窓: 1動画を6回ループ
+ * 車輪: 1動画を6回ループ
+ *
+ * @param input 背景6個 + 窓1個 + 車輪1個
  * @param environment 環境 (stage or production)
  * @param resolution 解像度 (デフォルト: sd)
  */
 export async function mergeVideos(
-  segments: VideoSegment[],
+  input: VideoInput,
   environment: ShotstackEnvironment = "stage",
   resolution: ShotstackResolution = "sd"
 ): Promise<ShotstackRenderResult> {
-  if (segments.length !== SEGMENT_COUNT) {
-    throw new Error(`セグメント数は${SEGMENT_COUNT}である必要があります`);
+  if (input.backgrounds.length !== SEGMENT_COUNT) {
+    throw new Error(`背景は${SEGMENT_COUNT}個必要です`);
   }
 
   const apiKey = getApiKey(environment);
   const baseUrl = getBaseUrl(environment);
 
-  // 各トラックに3セグメント分のクリップを生成
+  // 各トラックに6セグメント分のクリップを生成
   const wheelClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
   const windowClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
   const backgroundClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
 
-  segments.forEach((segment, index) => {
-    const startTime = index * SEGMENT_DURATION;
+  for (let i = 0; i < SEGMENT_COUNT; i++) {
+    const startTime = i * SEGMENT_DURATION;
 
-    // 車輪トラック（ルママスク + 動画）
+    // 車輪トラック（ルママスク + 動画）- 同じ動画を6回ループ
     wheelClips.push({
       asset: { type: "luma", src: getMaskUrl("wheel") },
       start: startTime,
       length: SEGMENT_DURATION,
     });
     wheelClips.push({
-      asset: { type: "video", src: segment.wheel },
+      asset: { type: "video", src: input.wheel },
       start: startTime,
       length: SEGMENT_DURATION,
     });
 
-    // 窓トラック（ルママスク + 動画）
+    // 窓トラック（ルママスク + 動画）- 同じ動画を6回ループ
     windowClips.push({
       asset: { type: "luma", src: getMaskUrl("window") },
       start: startTime,
       length: SEGMENT_DURATION,
     });
     windowClips.push({
-      asset: { type: "video", src: segment.window },
+      asset: { type: "video", src: input.window },
       start: startTime,
       length: SEGMENT_DURATION,
     });
 
-    // 背景トラック（ルママスク + 動画）
+    // 背景トラック（ルママスク + 動画）- 各セグメントで異なる動画
     backgroundClips.push({
       asset: { type: "luma", src: getMaskUrl("body") },
       start: startTime,
       length: SEGMENT_DURATION,
     });
     backgroundClips.push({
-      asset: { type: "video", src: segment.background },
+      asset: { type: "video", src: input.backgrounds[i] },
       start: startTime,
       length: SEGMENT_DURATION,
     });
-  });
+  }
 
   // 3トラック構造: 同一トラック内に luma + video を配置
   // Shotstack の仕様に従い、マスクは同一トラック内のクリップに適用される
   const tracks = [
-    // Top Layer: Wheel with Luma Mask（3セグメント分）
+    // Top Layer: Wheel with Luma Mask（6セグメント分、同じ動画をループ）
     { clips: wheelClips },
-    // Middle Layer: Window with Luma Mask（3セグメント分）
+    // Middle Layer: Window with Luma Mask（6セグメント分、同じ動画をループ）
     { clips: windowClips },
-    // Bottom Layer: Background（3セグメント分）
+    // Bottom Layer: Background（6セグメント分、各セグメントで異なる動画）
     { clips: backgroundClips },
   ];
 

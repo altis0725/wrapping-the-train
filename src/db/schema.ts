@@ -57,6 +57,16 @@ export const videos = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id),
+    // === 新仕様: 60秒動画（背景6個 + 窓1個 + 車輪1個） ===
+    background1TemplateId: integer("background1_template_id").references(() => templates.id),
+    background2TemplateId: integer("background2_template_id").references(() => templates.id),
+    background3TemplateId: integer("background3_template_id").references(() => templates.id),
+    background4TemplateId: integer("background4_template_id").references(() => templates.id),
+    background5TemplateId: integer("background5_template_id").references(() => templates.id),
+    background6TemplateId: integer("background6_template_id").references(() => templates.id),
+    windowTemplateId: integer("window_template_id").references(() => templates.id),
+    wheelTemplateId: integer("wheel_template_id").references(() => templates.id),
+    // === 旧仕様: 30秒動画（後方互換性のため残す） ===
     // セグメント1（0-10秒）
     template1Id: integer("template1_id").references(() => templates.id),
     template2Id: integer("template2_id").references(() => templates.id),
@@ -94,6 +104,40 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
     fields: [videos.userId],
     references: [users.id],
   }),
+  // === 新仕様: 60秒動画 ===
+  background1Template: one(templates, {
+    fields: [videos.background1TemplateId],
+    references: [templates.id],
+  }),
+  background2Template: one(templates, {
+    fields: [videos.background2TemplateId],
+    references: [templates.id],
+  }),
+  background3Template: one(templates, {
+    fields: [videos.background3TemplateId],
+    references: [templates.id],
+  }),
+  background4Template: one(templates, {
+    fields: [videos.background4TemplateId],
+    references: [templates.id],
+  }),
+  background5Template: one(templates, {
+    fields: [videos.background5TemplateId],
+    references: [templates.id],
+  }),
+  background6Template: one(templates, {
+    fields: [videos.background6TemplateId],
+    references: [templates.id],
+  }),
+  windowTemplate: one(templates, {
+    fields: [videos.windowTemplateId],
+    references: [templates.id],
+  }),
+  wheelTemplate: one(templates, {
+    fields: [videos.wheelTemplateId],
+    references: [templates.id],
+  }),
+  // === 旧仕様: 30秒動画（後方互換性） ===
   // セグメント1
   template1: one(templates, {
     fields: [videos.template1Id],

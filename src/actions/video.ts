@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth/session";
-import { validateTemplateSelectionBatch } from "./template";
+import { validateVideoTemplates } from "./template";
 import {
   createVideoSchema,
   videoIdSchema,
@@ -23,7 +23,7 @@ import {
   mergeVideos,
   type ShotstackEnvironment,
   type ShotstackResolution,
-  type VideoSegment,
+  type VideoInput,
 } from "@/lib/shotstack";
 import { getTemplateVideoUrl, getVideoUrl, getThumbnailUrl } from "@/lib/storage/resolver";
 import { deleteStorageFile } from "@/lib/storage/upload";
@@ -61,7 +61,7 @@ export type RetryVideoResult =
 
 /**
  * 動画を作成（draft状態で作成し、レンダリングを開始）
- * 30秒動画：3セグメント×3テンプレート = 9テンプレートIDを受け取る
+ * 60秒動画：背景6個 + 窓1個 + 車輪1個 = 8テンプレートIDを受け取る
  */
 export async function createVideo(
   input: CreateVideoInput
@@ -77,37 +77,37 @@ export async function createVideo(
     return { success: false, error: parsed.error.errors[0]?.message || "入力が不正です" };
   }
 
-  const { segments } = parsed.data;
+  const { backgrounds, windowTemplateId, wheelTemplateId } = parsed.data;
 
-  // 全3セグメントのテンプレートを一括検証（クエリ最適化）
-  const validations = await validateTemplateSelectionBatch(segments);
+  // テンプレートを一括検証（クエリ最適化）
+  const validation = await validateVideoTemplates({
+    backgrounds,
+    windowTemplateId,
+    wheelTemplateId,
+  });
 
-  const failedValidation = validations.find((v) => !v.valid);
-  if (failedValidation) {
-    return { success: false, error: failedValidation.error || "テンプレートの検証に失敗しました" };
+  if (!validation.valid) {
+    return { success: false, error: validation.error || "テンプレートの検証に失敗しました" };
   }
 
   // 有効期限を計算（無料動画は7日間）
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + FREE_VIDEO_EXPIRY_DAYS);
 
-  // 動画レコードを作成（pending状態）- 9テンプレートIDを保存
+  // 動画レコードを作成（pending状態）- 8テンプレートIDを保存
   const [video] = await db
     .insert(videos)
     .values({
       userId: user.id,
-      // セグメント1
-      template1Id: segments[0].template1Id,
-      template2Id: segments[0].template2Id,
-      template3Id: segments[0].template3Id,
-      // セグメント2
-      segment2Template1Id: segments[1].template1Id,
-      segment2Template2Id: segments[1].template2Id,
-      segment2Template3Id: segments[1].template3Id,
-      // セグメント3
-      segment3Template1Id: segments[2].template1Id,
-      segment3Template2Id: segments[2].template2Id,
-      segment3Template3Id: segments[2].template3Id,
+      // 新仕様: 60秒動画
+      background1TemplateId: backgrounds[0],
+      background2TemplateId: backgrounds[1],
+      background3TemplateId: backgrounds[2],
+      background4TemplateId: backgrounds[3],
+      background5TemplateId: backgrounds[4],
+      background6TemplateId: backgrounds[5],
+      windowTemplateId,
+      wheelTemplateId,
       status: VIDEO_STATUS.PENDING,
       videoType: "free",
       expiresAt,
@@ -116,21 +116,28 @@ export async function createVideo(
 
   // Shotstackでレンダリング開始
   try {
-    // 全セグメントのテンプレート動画URLを解決
-    const videoSegments: VideoSegment[] = await Promise.all(
-      validations.map(async (validation) => {
-        const { background, window, wheel } = validation.templates!;
-        const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
-          getTemplateVideoUrl(background),
-          getTemplateVideoUrl(window),
-          getTemplateVideoUrl(wheel),
-        ]);
-        return { background: backgroundUrl, window: windowUrl, wheel: wheelUrl };
-      })
+    const { backgrounds: bgTemplates, window: windowTemplate, wheel: wheelTemplate } = validation.templates!;
+
+    // 背景6個の動画URLを解決
+    const backgroundUrls = await Promise.all(
+      bgTemplates.map((bg) => getTemplateVideoUrl(bg))
     );
 
+    // 窓・車輪の動画URLを解決
+    const [windowUrl, wheelUrl] = await Promise.all([
+      getTemplateVideoUrl(windowTemplate),
+      getTemplateVideoUrl(wheelTemplate),
+    ]);
+
+    // 新形式でShotstackに送信
+    const videoInput: VideoInput = {
+      backgrounds: backgroundUrls,
+      window: windowUrl,
+      wheel: wheelUrl,
+    };
+
     const environment: ShotstackEnvironment = "stage"; // 無料動画はsandbox
-    const { renderId } = await mergeVideos(videoSegments, environment);
+    const { renderId } = await mergeVideos(videoInput, environment);
 
     // render_idとstatus更新
     await db
@@ -211,7 +218,7 @@ export async function getUserVideos(): Promise<Video[]> {
 }
 
 /**
- * 失敗した動画を手動でリトライ（30秒動画対応）
+ * 失敗した動画を手動でリトライ（60秒動画対応）
  */
 export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
   const user = await getCurrentUser();
@@ -250,94 +257,104 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
     };
   }
 
-  // セグメント1のテンプレートは必須
-  if (
-    !currentVideo.template1Id ||
-    !currentVideo.template2Id ||
-    !currentVideo.template3Id
-  ) {
-    return { success: false, error: "テンプレート情報が不足しています" };
-  }
+  // 新仕様の60秒動画かどうかを判定
+  const isNewFormat = currentVideo.background1TemplateId !== null;
 
-  // 全3セグメントのテンプレートを一括検証（クエリ最適化）
-  // セグメント2,3がnullの場合はセグメント1と同じテンプレートを使用（後方互換性）
-  const segmentConfigs = [
-    {
-      template1Id: currentVideo.template1Id,
-      template2Id: currentVideo.template2Id,
-      template3Id: currentVideo.template3Id,
-    },
-    {
-      template1Id: currentVideo.segment2Template1Id ?? currentVideo.template1Id,
-      template2Id: currentVideo.segment2Template2Id ?? currentVideo.template2Id,
-      template3Id: currentVideo.segment2Template3Id ?? currentVideo.template3Id,
-    },
-    {
-      template1Id: currentVideo.segment3Template1Id ?? currentVideo.template1Id,
-      template2Id: currentVideo.segment3Template2Id ?? currentVideo.template2Id,
-      template3Id: currentVideo.segment3Template3Id ?? currentVideo.template3Id,
-    },
-  ];
+  if (isNewFormat) {
+    // 新仕様: 60秒動画
+    if (
+      !currentVideo.background1TemplateId ||
+      !currentVideo.background2TemplateId ||
+      !currentVideo.background3TemplateId ||
+      !currentVideo.background4TemplateId ||
+      !currentVideo.background5TemplateId ||
+      !currentVideo.background6TemplateId ||
+      !currentVideo.windowTemplateId ||
+      !currentVideo.wheelTemplateId
+    ) {
+      return { success: false, error: "テンプレート情報が不足しています" };
+    }
 
-  const validations = await validateTemplateSelectionBatch(segmentConfigs);
+    const validation = await validateVideoTemplates({
+      backgrounds: [
+        currentVideo.background1TemplateId,
+        currentVideo.background2TemplateId,
+        currentVideo.background3TemplateId,
+        currentVideo.background4TemplateId,
+        currentVideo.background5TemplateId,
+        currentVideo.background6TemplateId,
+      ],
+      windowTemplateId: currentVideo.windowTemplateId,
+      wheelTemplateId: currentVideo.wheelTemplateId,
+    });
 
-  const failedValidation = validations.find((v) => !v.valid);
-  if (failedValidation) {
-    return { success: false, error: failedValidation.error || "テンプレートの検証に失敗しました" };
-  }
+    if (!validation.valid) {
+      return { success: false, error: validation.error || "テンプレートの検証に失敗しました" };
+    }
 
-  try {
-    const environment: ShotstackEnvironment =
-      currentVideo.videoType === "paid" ? "production" : "stage";
-    const resolution: ShotstackResolution =
-      currentVideo.videoType === "paid" ? "1080" : "sd";
+    try {
+      const environment: ShotstackEnvironment =
+        currentVideo.videoType === "paid" ? "production" : "stage";
+      const resolution: ShotstackResolution =
+        currentVideo.videoType === "paid" ? "1080" : "sd";
 
-    // 全セグメントのテンプレート動画URLを解決
-    const videoSegments: VideoSegment[] = await Promise.all(
-      validations.map(async (validation) => {
-        const { background, window, wheel } = validation.templates!;
-        const [backgroundUrl, windowUrl, wheelUrl] = await Promise.all([
-          getTemplateVideoUrl(background),
-          getTemplateVideoUrl(window),
-          getTemplateVideoUrl(wheel),
-        ]);
-        return { background: backgroundUrl, window: windowUrl, wheel: wheelUrl };
-      })
-    );
+      const { backgrounds: bgTemplates, window: windowTemplate, wheel: wheelTemplate } = validation.templates!;
 
-    const { renderId } = await mergeVideos(videoSegments, environment, resolution);
+      // 背景6個の動画URLを解決
+      const backgroundUrls = await Promise.all(
+        bgTemplates.map((bg) => getTemplateVideoUrl(bg))
+      );
 
-    // ステータスとリトライ回数を更新
-    await db
-      .update(videos)
-      .set({
-        renderId,
-        status: VIDEO_STATUS.PROCESSING,
-        retryCount: currentVideo.retryCount + 1,
-        lastError: null,
-      })
-      .where(eq(videos.id, videoId));
+      // 窓・車輪の動画URLを解決
+      const [windowUrl, wheelUrl] = await Promise.all([
+        getTemplateVideoUrl(windowTemplate),
+        getTemplateVideoUrl(wheelTemplate),
+      ]);
 
-    const updatedVideo = await db
-      .select()
-      .from(videos)
-      .where(eq(videos.id, videoId))
-      .limit(1);
+      const videoInput: VideoInput = {
+        backgrounds: backgroundUrls,
+        window: windowUrl,
+        wheel: wheelUrl,
+      };
 
-    return { success: true, video: updatedVideo[0] };
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "リトライに失敗しました";
+      const { renderId } = await mergeVideos(videoInput, environment, resolution);
 
-    await db
-      .update(videos)
-      .set({
-        lastError: errorMessage,
-        retryCount: currentVideo.retryCount + 1,
-      })
-      .where(eq(videos.id, videoId));
+      // ステータスとリトライ回数を更新
+      await db
+        .update(videos)
+        .set({
+          renderId,
+          status: VIDEO_STATUS.PROCESSING,
+          retryCount: currentVideo.retryCount + 1,
+          lastError: null,
+        })
+        .where(eq(videos.id, videoId));
 
-    return { success: false, error: errorMessage };
+      const updatedVideo = await db
+        .select()
+        .from(videos)
+        .where(eq(videos.id, videoId))
+        .limit(1);
+
+      return { success: true, video: updatedVideo[0] };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "リトライに失敗しました";
+
+      await db
+        .update(videos)
+        .set({
+          lastError: errorMessage,
+          retryCount: currentVideo.retryCount + 1,
+        })
+        .where(eq(videos.id, videoId));
+
+      return { success: false, error: errorMessage };
+    }
+  } else {
+    // 旧仕様: 30秒動画（後方互換性）
+    // 旧形式の動画はリトライをサポートしない
+    return { success: false, error: "この動画形式はリトライをサポートしていません。新しい動画を作成してください。" };
   }
 }
 

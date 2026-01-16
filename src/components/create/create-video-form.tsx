@@ -6,21 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { StepIndicator } from "./step-indicator";
 import { TemplateGrid } from "./template-grid";
+import { BackgroundGrid } from "./background-grid";
 import { VideoPreview } from "./video-preview";
-import { SegmentTransition } from "./segment-transition";
 import { useVideoStatus } from "./use-video-status";
 import { createVideo, retryVideo } from "@/actions/video";
 import { VIDEO_STATUS } from "@/db/schema";
 import type { TemplateWithResolvedThumbnail } from "@/actions/template";
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
-const STEPS = [
-  { label: "背景", description: "背景の映像を選択" },
-  { label: "窓", description: "窓の映像を選択" },
-  { label: "車輪", description: "車輪の映像を選択" },
-];
+// 新仕様: 60秒動画（背景6個 + 窓1個 + 車輪1個）
+const BACKGROUND_COUNT = 6;
 
-const SEGMENT_COUNT = 3;
+const STEPS = [
+  { label: "背景", description: "6つの背景映像を選択" },
+  { label: "窓", description: "窓の映像を1つ選択" },
+  { label: "車輪", description: "車輪の映像を1つ選択" },
+];
 
 interface CreateVideoFormProps {
   templates: {
@@ -32,33 +33,29 @@ interface CreateVideoFormProps {
 
 type Step = 0 | 1 | 2;
 
-// セグメントの選択状態
-interface SegmentSelection {
-  background: TemplateWithResolvedThumbnail | null;
+// 新仕様の選択状態
+interface VideoSelection {
+  backgrounds: (TemplateWithResolvedThumbnail | null)[];  // 6個の配列
   window: TemplateWithResolvedThumbnail | null;
   wheel: TemplateWithResolvedThumbnail | null;
 }
-
-// フェーズ: selection（テンプレート選択中）、transition（セグメント遷移画面）、complete（全選択完了）
-type Phase = "selection" | "transition" | "complete";
 
 export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  // セグメント状態管理
-  const [currentSegment, setCurrentSegment] = useState(0); // 0, 1, 2
-  const [segments, setSegments] = useState<SegmentSelection[]>([
-    { background: null, window: null, wheel: null },
-    { background: null, window: null, wheel: null },
-    { background: null, window: null, wheel: null },
-  ]);
+  // 選択状態管理（新仕様）
+  const [selection, setSelection] = useState<VideoSelection>({
+    backgrounds: Array(BACKGROUND_COUNT).fill(null),
+    window: null,
+    wheel: null,
+  });
 
-  // 各セグメント内のステップ
+  // 現在のステップ（0: 背景, 1: 窓, 2: 車輪）
   const [currentStep, setCurrentStep] = useState<Step>(0);
 
-  // フェーズ管理
-  const [phase, setPhase] = useState<Phase>("selection");
+  // 背景選択時のアクティブスロット
+  const [activeBackgroundSlot, setActiveBackgroundSlot] = useState<number | null>(0);
 
   const [createdVideoId, setCreatedVideoId] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -69,69 +66,13 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
     enabled: createdVideoId !== null,
   });
 
-  // 現在のセグメントの選択状態を取得
-  const currentSelection = segments[currentSegment];
-
-  // 現在のステップのテンプレート一覧を取得
-  const getCurrentTemplates = (): TemplateWithResolvedThumbnail[] => {
-    switch (currentStep) {
-      case 0:
-        return templates.background;
-      case 1:
-        return templates.window;
-      case 2:
-        return templates.wheel;
-      default:
-        return [];
-    }
-  };
-
-  // 現在のステップで選択されているテンプレートID
-  const getCurrentSelectedId = (): number | null => {
-    switch (currentStep) {
-      case 0:
-        return currentSelection.background?.id ?? null;
-      case 1:
-        return currentSelection.window?.id ?? null;
-      case 2:
-        return currentSelection.wheel?.id ?? null;
-      default:
-        return null;
-    }
-  };
-
-  // テンプレート選択ハンドラ
-  const handleSelectTemplate = useCallback(
-    (template: TemplateWithResolvedThumbnail) => {
-      setSegments((prev) => {
-        const newSegments = [...prev];
-        const currentSeg = { ...newSegments[currentSegment] };
-
-        switch (currentStep) {
-          case 0:
-            currentSeg.background = template;
-            break;
-          case 1:
-            currentSeg.window = template;
-            break;
-          case 2:
-            currentSeg.wheel = template;
-            break;
-        }
-
-        newSegments[currentSegment] = currentSeg;
-        return newSegments;
-      });
-    },
-    [currentSegment, currentStep]
-  );
-
-  // 完了したステップの配列（現在のセグメント内）
+  // 完了したステップの配列
   const getCompletedSteps = (): number[] => {
     const completed: number[] = [];
-    if (currentSelection.background) completed.push(0);
-    if (currentSelection.window) completed.push(1);
-    if (currentSelection.wheel) completed.push(2);
+    const allBackgroundsSelected = selection.backgrounds.every((bg) => bg !== null);
+    if (allBackgroundsSelected) completed.push(0);
+    if (selection.window) completed.push(1);
+    if (selection.wheel) completed.push(2);
     return completed;
   };
 
@@ -139,85 +80,82 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   const canProceed = (): boolean => {
     switch (currentStep) {
       case 0:
-        return currentSelection.background !== null;
+        return selection.backgrounds.every((bg) => bg !== null);
       case 1:
-        return currentSelection.window !== null;
+        return selection.window !== null;
       case 2:
-        return currentSelection.wheel !== null;
+        return selection.wheel !== null;
       default:
         return false;
     }
   };
 
+  // 背景スロットをクリック
+  const handleBackgroundSlotClick = (slotIndex: number) => {
+    setActiveBackgroundSlot(slotIndex);
+  };
+
+  // 背景テンプレートを選択
+  const handleBackgroundSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      if (activeBackgroundSlot === null) return;
+
+      setSelection((prev) => {
+        const newBackgrounds = [...prev.backgrounds];
+        newBackgrounds[activeBackgroundSlot] = template;
+
+        // setSelection内で新しい配列を使って次スロットを計算（stale closure回避）
+        const nextEmptySlot = newBackgrounds.findIndex(
+          (bg, idx) => bg === null && idx !== activeBackgroundSlot
+        );
+        if (nextEmptySlot !== -1) {
+          setActiveBackgroundSlot(nextEmptySlot);
+        } else {
+          // 全スロット選択済み
+          setActiveBackgroundSlot(null);
+        }
+
+        return { ...prev, backgrounds: newBackgrounds };
+      });
+    },
+    [activeBackgroundSlot]
+  );
+
+  // 窓テンプレートを選択
+  const handleWindowSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      setSelection((prev) => ({ ...prev, window: template }));
+    },
+    []
+  );
+
+  // 車輪テンプレートを選択
+  const handleWheelSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      setSelection((prev) => ({ ...prev, wheel: template }));
+    },
+    []
+  );
+
   // 次へボタンのハンドラ
   const handleNext = () => {
     if (currentStep < 2) {
-      // セグメント内の次のステップへ
       setCurrentStep((prev) => (prev + 1) as Step);
-    } else {
-      // セグメント完了
-      if (currentSegment < SEGMENT_COUNT - 1) {
-        // 次のセグメントへの遷移画面を表示
-        // currentSegmentを+1してから遷移画面を表示（previousSelectionが正しく参照できるように）
-        setCurrentSegment((prev) => prev + 1);
-        setPhase("transition");
-      } else {
-        // 全セグメント完了
-        setPhase("complete");
-      }
     }
   };
 
   // 戻るボタンのハンドラ
   const handleBack = () => {
     if (currentStep > 0) {
-      // セグメント内の前のステップへ
       setCurrentStep((prev) => (prev - 1) as Step);
-    } else if (currentSegment > 0) {
-      // 前のセグメントの最終ステップへ
-      setCurrentSegment((prev) => prev - 1);
-      setCurrentStep(2);
-      setPhase("selection");
     }
-  };
-
-  // 「前と同じ」ボタンのハンドラ
-  // 注: transition画面表示時点でcurrentSegmentは既に+1されている
-  const handleCopyPrevious = () => {
-    const prevSegment = segments[currentSegment - 1];
-    setSegments((prev) => {
-      const newSegments = [...prev];
-      newSegments[currentSegment] = { ...prevSegment };
-      return newSegments;
-    });
-
-    if (currentSegment < SEGMENT_COUNT - 1) {
-      // 次のセグメントへの遷移画面を表示
-      setCurrentSegment((prev) => prev + 1);
-      setCurrentStep(0);
-      // transitionのまま（次のセグメントの遷移画面を表示）
-    } else {
-      // 全セグメント完了
-      setPhase("complete");
-    }
-  };
-
-  // 「新しく選ぶ」ボタンのハンドラ
-  // 注: transition画面表示時点でcurrentSegmentは既に+1されている
-  const handleSelectNew = () => {
-    // currentSegmentは既に次のセグメントを指しているので、そのまま選択画面へ
-    setCurrentStep(0);
-    setPhase("selection");
   };
 
   // 動画作成
   const handleCreateVideo = async () => {
-    // 全セグメントの選択が完了しているか確認
-    const allSelected = segments.every(
-      (seg) => seg.background && seg.window && seg.wheel
-    );
-
-    if (!allSelected) {
+    // 全選択が完了しているか確認
+    const allBackgroundsSelected = selection.backgrounds.every((bg) => bg !== null);
+    if (!allBackgroundsSelected || !selection.window || !selection.wheel) {
       setCreateError("すべてのテンプレートを選択してください");
       return;
     }
@@ -226,11 +164,9 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
 
     startTransition(async () => {
       const result = await createVideo({
-        segments: segments.map((seg) => ({
-          template1Id: seg.background!.id,
-          template2Id: seg.window!.id,
-          template3Id: seg.wheel!.id,
-        })),
+        backgrounds: selection.backgrounds.map((bg) => bg!.id),
+        windowTemplateId: selection.window!.id,
+        wheelTemplateId: selection.wheel!.id,
       });
 
       if (result.success) {
@@ -279,12 +215,12 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
           </h2>
           {isProcessing && (
             <p className="text-muted-foreground">
-              しばらくお待ちください（1〜2分程度）
+              しばらくお待ちください（2〜3分程度）
             </p>
           )}
         </div>
 
-        {/* プログレス表示（ARIA属性追加） */}
+        {/* プログレス表示 */}
         {isProcessing && (
           <div className="max-w-md mx-auto space-y-2">
             <Progress
@@ -293,25 +229,25 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
               aria-label="動画生成中"
             />
             <p className="text-sm text-center text-muted-foreground" aria-hidden="true">
-              処理中...
+              60秒動画を生成中...
             </p>
           </div>
         )}
 
-        {/* プレビュー（セグメント1のみ表示） */}
+        {/* プレビュー（背景1のサムネイル表示） */}
         <div className="max-w-2xl mx-auto">
           <VideoPreview
             selectedTemplates={{
-              background: segments[0].background,
-              window: segments[0].window,
-              wheel: segments[0].wheel,
+              background: selection.backgrounds[0],
+              window: selection.window,
+              wheel: selection.wheel,
             }}
             isGenerating={isProcessing}
             generatedVideoUrl={videoUrl}
           />
         </div>
 
-        {/* エラー表示（role="alert"でスクリーンリーダーに即座に通知） */}
+        {/* エラー表示 */}
         {(isFailed || createError || error) && (
           <div
             role="alert"
@@ -360,187 +296,66 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
     );
   }
 
-  // セグメント遷移画面
-  // 注: この時点でcurrentSegmentは「これから選択するセグメント」を指している
-  if (phase === "transition") {
-    const previousSelection = currentSegment > 0 ? segments[currentSegment - 1] : null;
-
-    // 安全ガード: previousSelectionがない場合（論理的にはありえないが防御的に）
-    // render中のstate更新を避けるため、nullを返してuseEffect等で処理する代わりに
-    // エラー状態として表示（実際には発生しない）
-    if (!previousSelection) {
-      return (
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">読み込み中...</p>
-        </div>
-      );
-    }
-
-    return (
-      <SegmentTransition
-        currentSegment={currentSegment}
-        previousSelection={previousSelection}
-        onCopyPrevious={handleCopyPrevious}
-        onSelectNew={handleSelectNew}
-        onBack={() => {
-          // 前のセグメントに戻る
-          setCurrentSegment((prev) => prev - 1);
-          setCurrentStep(2);
-          setPhase("selection");
-        }}
-      />
-    );
-  }
-
-  // 全セグメント完了確認画面
-  if (phase === "complete") {
-    return (
-      <div className="space-y-8">
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-bold">選択完了</h2>
-          <p className="text-muted-foreground">
-            3セグメント（30秒）の動画を作成します
-          </p>
-        </div>
-
-        {/* セグメントプレビュー */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {segments.map((seg, index) => (
-            <div key={index} className="border rounded-lg p-4">
-              <h3 className="font-medium mb-2 text-center">
-                セグメント {index + 1}
-              </h3>
-              <VideoPreview
-                selectedTemplates={{
-                  background: seg.background,
-                  window: seg.window,
-                  wheel: seg.wheel,
-                }}
-              />
-            </div>
-          ))}
-        </div>
-
-        {/* エラー表示 */}
-        {createError && (
-          <div className="bg-destructive/10 text-destructive p-4 rounded-lg text-center">
-            {createError}
-          </div>
-        )}
-
-        {/* アクションボタン */}
-        <div className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setCurrentSegment(SEGMENT_COUNT - 1);
-              setCurrentStep(2);
-              setPhase("selection");
-            }}
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            戻る
-          </Button>
-          <Button onClick={handleCreateVideo} disabled={isPending}>
-            {isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                作成中...
-              </>
-            ) : (
-              "動画を作成"
-            )}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   // テンプレート選択UI
   return (
     <div className="space-y-8">
-      {/* セグメント・ステップインジケーター */}
-      <div className="space-y-4">
-        {/* セグメントインジケーター（セマンティックHTML + ARIA属性） */}
-        <nav aria-label="セグメント進捗">
-          <ol className="flex justify-center items-center gap-2 text-sm list-none p-0 m-0">
-            {Array.from({ length: SEGMENT_COUNT }).map((_, index) => (
-              <li key={index}>
-                <div
-                  className={`px-3 py-1 rounded-full ${
-                    index === currentSegment
-                      ? "bg-primary text-primary-foreground"
-                      : index < currentSegment
-                        ? "bg-primary/30 text-primary"
-                        : "bg-muted text-muted-foreground"
-                  }`}
-                  aria-current={index === currentSegment ? "step" : undefined}
-                  aria-label={`セグメント ${index + 1}${
-                    index === currentSegment
-                      ? " (現在)"
-                      : index < currentSegment
-                        ? " (完了)"
-                        : ""
-                  }`}
-                >
-                  {index + 1}
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="sr-only" aria-live="polite">
-            セグメント {currentSegment + 1} / {SEGMENT_COUNT}
-          </p>
-          <span className="ml-2 text-muted-foreground" aria-hidden="true">
-            セグメント {currentSegment + 1} / {SEGMENT_COUNT}
-          </span>
-        </nav>
-
-        {/* ステップインジケーター */}
-        <StepIndicator
-          steps={STEPS}
-          currentStep={currentStep}
-          completedSteps={getCompletedSteps()}
-        />
-      </div>
+      {/* ステップインジケーター */}
+      <StepIndicator
+        steps={STEPS}
+        currentStep={currentStep}
+        completedSteps={getCompletedSteps()}
+      />
 
       {/* メインコンテンツ */}
-      <div className="grid md:grid-cols-2 gap-8">
-        {/* 左: プレビュー */}
-        <div className="order-2 md:order-1">
-          <div className="sticky top-4">
-            <h3 className="font-medium mb-4">プレビュー</h3>
-            <VideoPreview
-              selectedTemplates={{
-                background: currentSelection.background,
-                window: currentSelection.window,
-                wheel: currentSelection.wheel,
-              }}
-            />
-          </div>
-        </div>
+      <div className="space-y-6">
+        {/* Step 0: 背景6個選択 */}
+        {currentStep === 0 && (
+          <BackgroundGrid
+            templates={templates.background}
+            selectedBackgrounds={selection.backgrounds}
+            activeSlot={activeBackgroundSlot}
+            onSlotClick={handleBackgroundSlotClick}
+            onTemplateSelect={handleBackgroundSelect}
+          />
+        )}
 
-        {/* 右: テンプレート選択 */}
-        <div className="order-1 md:order-2">
+        {/* Step 1: 窓選択 */}
+        {currentStep === 1 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-medium" data-testid="category">
-                {STEPS[currentStep].label}を選択
+                窓を選択
               </h3>
               <span className="text-sm text-muted-foreground">
-                {STEPS[currentStep].description}
+                6セグメント全体で同じ映像を使用
               </span>
             </div>
-
-            <div data-testid="template-selector">
-              <TemplateGrid
-                templates={getCurrentTemplates()}
-                selectedId={getCurrentSelectedId()}
-                onSelect={handleSelectTemplate}
-              />
-            </div>
+            <TemplateGrid
+              templates={templates.window}
+              selectedId={selection.window?.id ?? null}
+              onSelect={handleWindowSelect}
+            />
           </div>
-        </div>
+        )}
+
+        {/* Step 2: 車輪選択 */}
+        {currentStep === 2 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium" data-testid="category">
+                車輪を選択
+              </h3>
+              <span className="text-sm text-muted-foreground">
+                6セグメント全体で同じ映像を使用
+              </span>
+            </div>
+            <TemplateGrid
+              templates={templates.wheel}
+              selectedId={selection.wheel?.id ?? null}
+              onSelect={handleWheelSelect}
+            />
+          </div>
+        )}
       </div>
 
       {/* エラー表示 */}
@@ -555,16 +370,58 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
         <Button
           variant="outline"
           onClick={handleBack}
-          disabled={currentStep === 0 && currentSegment === 0}
+          disabled={currentStep === 0}
         >
           <ChevronLeft className="h-4 w-4 mr-2" />
           戻る
         </Button>
 
-        <Button onClick={handleNext} disabled={!canProceed()}>
-          次へ
-          <ChevronRight className="h-4 w-4 ml-2" />
-        </Button>
+        {currentStep < 2 ? (
+          <Button onClick={handleNext} disabled={!canProceed()}>
+            次へ
+            <ChevronRight className="h-4 w-4 ml-2" />
+          </Button>
+        ) : (
+          <Button onClick={handleCreateVideo} disabled={isPending || !canProceed()}>
+            {isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                作成中...
+              </>
+            ) : (
+              "動画を作成（60秒）"
+            )}
+          </Button>
+        )}
+      </div>
+
+      {/* 選択サマリー */}
+      <div className="border-t pt-6">
+        <h3 className="font-medium mb-4">選択内容</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <span className="text-muted-foreground">背景:</span>
+            <span className="ml-2">
+              {selection.backgrounds.filter((bg) => bg !== null).length} / 6
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">窓:</span>
+            <span className="ml-2">
+              {selection.window ? selection.window.title : "未選択"}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">車輪:</span>
+            <span className="ml-2">
+              {selection.wheel ? selection.wheel.title : "未選択"}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">動画長:</span>
+            <span className="ml-2">60秒</span>
+          </div>
+        </div>
       </div>
     </div>
   );

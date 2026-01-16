@@ -34,12 +34,32 @@ function normalizeStorageKey(url: string): string {
 
 /**
  * 許可された相対パス（内部アセット）かどうかを判定
- * セキュリティ: 許可するパスプレフィックスをホワイトリストで限定
+ * セキュリティ:
+ * - 許可するパスプレフィックスをホワイトリストで限定
+ * - パストラバーサル攻撃を防止（..を含むパスを拒否）
+ * - 許可する拡張子をホワイトリストで限定
  */
 function isAllowedRelativePath(url: string): boolean {
   const allowedPrefixes = ["/img/", "/video/", "/assets/", "/thumbnails/"];
-  const trimmed = url.trim();
-  return allowedPrefixes.some((prefix) => trimmed.startsWith(prefix));
+  const allowedExtensions = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".mp4", ".webm", ".mov"];
+  const trimmed = url.trim().toLowerCase();
+
+  // パストラバーサル攻撃を防止
+  if (trimmed.includes("..") || trimmed.includes("%2e%2e")) {
+    return false;
+  }
+
+  // プレフィックスチェック
+  const hasAllowedPrefix = allowedPrefixes.some((prefix) => trimmed.startsWith(prefix));
+  if (!hasAllowedPrefix) {
+    return false;
+  }
+
+  // 拡張子チェック（クエリパラメータを除去してから判定）
+  const pathWithoutQuery = trimmed.split("?")[0];
+  const hasAllowedExtension = allowedExtensions.some((ext) => pathWithoutQuery.endsWith(ext));
+
+  return hasAllowedExtension;
 }
 
 /**
@@ -253,8 +273,9 @@ export type TemplateValidationResult = {
 };
 
 /**
- * 複数セグメントのテンプレート検証を一括で実行
+ * 複数セグメントのテンプレート検証を一括で実行（旧仕様・後方互換性）
  * パフォーマンス最適化: 全IDを一度のクエリで取得
+ * @deprecated 新しいvalidateVideoTemplatesを使用してください
  */
 export async function validateTemplateSelectionBatch(
   segments: SegmentTemplateIds[]
@@ -306,4 +327,102 @@ export async function validateTemplateSelectionBatch(
       },
     };
   });
+}
+
+// ============================================================================
+// 新仕様: 60秒動画（背景6個 + 窓1個 + 車輪1個）
+// ============================================================================
+
+/**
+ * 60秒動画用テンプレート入力型
+ */
+export type VideoTemplateIds = {
+  backgrounds: number[];  // 6個の背景テンプレートID
+  windowTemplateId: number;
+  wheelTemplateId: number;
+};
+
+/**
+ * 60秒動画用バリデーション結果型
+ */
+export type VideoTemplateValidationResult = {
+  valid: boolean;
+  error?: string;
+  templates?: {
+    backgrounds: Template[];  // 6個の背景テンプレート
+    window: Template;
+    wheel: Template;
+  };
+};
+
+/**
+ * 60秒動画のテンプレート検証
+ * 背景6個 + 窓1個 + 車輪1個 を一括で検証
+ */
+export async function validateVideoTemplates(
+  input: VideoTemplateIds
+): Promise<VideoTemplateValidationResult> {
+  const { backgrounds, windowTemplateId, wheelTemplateId } = input;
+
+  // 背景が6個あることを確認
+  if (backgrounds.length !== 6) {
+    return { valid: false, error: "背景は6個選択してください" };
+  }
+
+  // 全IDを収集（重複除去）
+  const allIds = [...new Set([...backgrounds, windowTemplateId, wheelTemplateId])];
+
+  // 一括でテンプレートを取得（1クエリのみ）
+  const templateMap = await getTemplatesByIds(allIds);
+
+  // 背景テンプレートの検証
+  const backgroundTemplates: Template[] = [];
+  for (let i = 0; i < 6; i++) {
+    const bgId = backgrounds[i];
+    const bg = templateMap.get(bgId);
+
+    if (!bg) {
+      return { valid: false, error: `背景${i + 1}のテンプレートが見つかりません` };
+    }
+    if (bg.category !== TEMPLATE_CATEGORY.BACKGROUND) {
+      return { valid: false, error: `背景${i + 1}のカテゴリが不正です` };
+    }
+    if (bg.isActive !== 1) {
+      return { valid: false, error: `背景${i + 1}は現在利用できません` };
+    }
+    backgroundTemplates.push(bg);
+  }
+
+  // 窓テンプレートの検証
+  const windowTemplate = templateMap.get(windowTemplateId);
+  if (!windowTemplate) {
+    return { valid: false, error: "窓テンプレートが見つかりません" };
+  }
+  if (windowTemplate.category !== TEMPLATE_CATEGORY.WINDOW) {
+    return { valid: false, error: "窓テンプレートのカテゴリが不正です" };
+  }
+  if (windowTemplate.isActive !== 1) {
+    return { valid: false, error: "窓テンプレートは現在利用できません" };
+  }
+
+  // 車輪テンプレートの検証
+  const wheelTemplate = templateMap.get(wheelTemplateId);
+  if (!wheelTemplate) {
+    return { valid: false, error: "車輪テンプレートが見つかりません" };
+  }
+  if (wheelTemplate.category !== TEMPLATE_CATEGORY.WHEEL) {
+    return { valid: false, error: "車輪テンプレートのカテゴリが不正です" };
+  }
+  if (wheelTemplate.isActive !== 1) {
+    return { valid: false, error: "車輪テンプレートは現在利用できません" };
+  }
+
+  return {
+    valid: true,
+    templates: {
+      backgrounds: backgroundTemplates,
+      window: windowTemplate,
+      wheel: wheelTemplate,
+    },
+  };
 }
