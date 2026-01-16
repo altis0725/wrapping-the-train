@@ -1,9 +1,19 @@
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getStorageClient, getBucketName } from "./client";
+import { TEMPLATE_CATEGORY } from "@/db/schema";
 
-// 許可するファイルタイプ
-const ALLOWED_MIME_TYPES = ["video/mp4", "video/quicktime"];
-const ALLOWED_EXTENSIONS = [".mp4", ".mov"];
+// 許可するファイルタイプ（動画）
+const ALLOWED_VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime"];
+const ALLOWED_VIDEO_EXTENSIONS = [".mp4", ".mov"];
+
+// 許可するファイルタイプ（音楽）
+const ALLOWED_MUSIC_MIME_TYPES = [
+  "audio/mpeg", // MP3
+  "audio/wav", // WAV
+  "audio/mp4", // M4A/AAC
+  "audio/x-m4a", // M4A（別MIMEタイプ）
+];
+const ALLOWED_MUSIC_EXTENSIONS = [".mp3", ".wav", ".m4a"];
 
 // 最大ファイルサイズ: 500MB
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
@@ -15,23 +25,29 @@ export interface UploadResult {
 }
 
 /**
- * テンプレート動画をストレージにアップロード
+ * テンプレートファイル（動画または音楽）をストレージにアップロード
  */
 export async function uploadTemplateVideo(
   file: File,
   category: number,
   templateId: number
 ): Promise<UploadResult> {
-  // バリデーション
-  const validation = validateFile(file);
+  const isMusic = category === TEMPLATE_CATEGORY.MUSIC;
+
+  // バリデーション（カテゴリに応じて動画/音楽を判定）
+  const validation = validateFile(file, isMusic);
   if (!validation.valid) {
     return { success: false, error: validation.error };
   }
 
   // ストレージキーを生成
+  // 音楽: music/{templateId}/{timestamp}{ext}
+  // 動画: templates/{category}/{templateId}/{timestamp}{ext}
   const extension = getFileExtension(file.name);
   const timestamp = Date.now();
-  const storageKey = `templates/${category}/${templateId}/${timestamp}${extension}`;
+  const storageKey = isMusic
+    ? `music/${templateId}/${timestamp}${extension}`
+    : `templates/${category}/${templateId}/${timestamp}${extension}`;
 
   try {
     const client = getStorageClient();
@@ -91,8 +107,21 @@ export async function deleteStorageFile(
 
 /**
  * ファイルバリデーション
+ * @param file - アップロードするファイル
+ * @param isMusic - 音楽ファイルかどうか
  */
-function validateFile(file: File): { valid: boolean; error?: string } {
+function validateFile(
+  file: File,
+  isMusic: boolean
+): { valid: boolean; error?: string } {
+  const allowedMimeTypes = isMusic
+    ? ALLOWED_MUSIC_MIME_TYPES
+    : ALLOWED_VIDEO_MIME_TYPES;
+  const allowedExtensions = isMusic
+    ? ALLOWED_MUSIC_EXTENSIONS
+    : ALLOWED_VIDEO_EXTENSIONS;
+  const formatLabel = isMusic ? "音楽" : "動画";
+
   // サイズチェック
   if (file.size > MAX_FILE_SIZE) {
     return {
@@ -102,19 +131,19 @@ function validateFile(file: File): { valid: boolean; error?: string } {
   }
 
   // MIME タイプチェック
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+  if (!allowedMimeTypes.includes(file.type)) {
     return {
       valid: false,
-      error: `許可されていないファイル形式です（許可: ${ALLOWED_EXTENSIONS.join(", ")}）`,
+      error: `許可されていない${formatLabel}形式です（許可: ${allowedExtensions.join(", ")}）`,
     };
   }
 
   // 拡張子チェック
   const extension = getFileExtension(file.name).toLowerCase();
-  if (!ALLOWED_EXTENSIONS.includes(extension)) {
+  if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: `許可されていない拡張子です（許可: ${ALLOWED_EXTENSIONS.join(", ")}）`,
+      error: `許可されていない拡張子です（許可: ${allowedExtensions.join(", ")}）`,
     };
   }
 

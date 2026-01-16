@@ -6,6 +6,7 @@ import { uploadTemplateVideo } from "@/lib/storage/upload";
 import { isStorageConfigured } from "@/lib/storage/client";
 import { isAdminOpenId } from "@/lib/auth/admin";
 import { generateThumbnail } from "@/lib/storage/thumbnail";
+import { TEMPLATE_CATEGORY } from "@/db/schema";
 
 // 最大ファイルサイズ: 500MB
 export const maxDuration = 300; // 5分のタイムアウト
@@ -62,7 +63,8 @@ export async function POST(request: NextRequest) {
     }
 
     const category = parseInt(categoryStr, 10);
-    if (![1, 2, 3].includes(category)) {
+    // カテゴリ1-4を許可（1:車両, 2:窓, 3:車輪, 4:音楽）
+    if (![1, 2, 3, 4].includes(category)) {
       return NextResponse.json(
         { error: "カテゴリが不正です" },
         { status: 400 }
@@ -85,9 +87,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    // サムネイル生成
+    // サムネイル生成（音楽カテゴリはスキップ）
     let thumbnailStorageKey: string | undefined;
-    if (result.storageKey) {
+    if (result.storageKey && category !== TEMPLATE_CATEGORY.MUSIC) {
       const thumbnailResult = await generateThumbnail(
         result.storageKey,
         category,
