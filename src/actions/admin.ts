@@ -87,7 +87,7 @@ export async function createTemplate(input: TemplateInput): Promise<{ success: b
       return { success: false, error: "動画URLまたはストレージキーが必要です" };
     }
 
-    if (![1, 2, 3].includes(input.category)) {
+    if (!VALID_CATEGORIES.includes(input.category)) {
       return { success: false, error: "カテゴリが不正です" };
     }
 
@@ -129,7 +129,7 @@ export async function updateTemplate(
     if (input.thumbnailUrl !== undefined) updateData.thumbnailUrl = input.thumbnailUrl || null;
     if (input.displayOrder !== undefined) updateData.displayOrder = input.displayOrder;
     if (input.category !== undefined) {
-      if (![1, 2, 3].includes(input.category)) {
+      if (!VALID_CATEGORIES.includes(input.category)) {
         return { success: false, error: "カテゴリが不正です" };
       }
       updateData.category = input.category;
