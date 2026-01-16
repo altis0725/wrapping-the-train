@@ -29,7 +29,7 @@ export default function LawPage() {
                   運営統括責任者
                 </th>
                 <td className="py-4 text-slate-300">
-                  代表取締役 [氏名]
+                  代表取締役 藤本昌信
                 </td>
               </tr>
 
@@ -38,9 +38,9 @@ export default function LawPage() {
                   所在地
                 </th>
                 <td className="py-4 text-slate-300">
-                  〒597-0105
+                  〒597-0001
                   <br />
-                  大阪府貝塚市三ツ松2296-1
+                  大阪府貝塚市近木町2-2
                 </td>
               </tr>
 
@@ -49,20 +49,27 @@ export default function LawPage() {
                   電話番号
                 </th>
                 <td className="py-4 text-slate-300">
-                  072-446-1006
+                  072-422-4567
                   <br />
                   <span className="text-sm">
-                    ※お問い合わせはフォームよりお願いいたします
+                    平日 9:00-17:00
                   </span>
                 </td>
               </tr>
 
               <tr className="border-b">
                 <th className="py-4 pr-4 text-left font-semibold align-top">
-                  メールアドレス
+                  お問い合わせ
                 </th>
                 <td className="py-4 text-slate-300">
-                  info@wrapping-the-train.jp
+                  <a
+                    href="https://lin.ee/QgS5XWv"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-green-400 hover:text-green-300 underline"
+                  >
+                    LINE公式アカウントでお問い合わせ
+                  </a>
                 </td>
               </tr>
 

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 interface VideoUploaderProps {
   category: number;
   templateId?: number;
-  onUpload: (storageKey: string) => void;
+  onUpload: (storageKey: string, thumbnailStorageKey?: string) => void;
   onError?: (error: string) => void;
   disabled?: boolean;
 }
@@ -69,6 +69,9 @@ export function VideoUploader({
     setProgress(0);
     setError(null);
 
+    // プログレスシミュレーション用のインターバル（try/finally でリソースリーク防止）
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -76,7 +79,7 @@ export function VideoUploader({
       formData.append("templateId", templateId.toString());
 
       // プログレスシミュレーション（XHR を使えば実際の進捗が取れるが、fetch APIでは難しい）
-      const progressInterval = setInterval(() => {
+      progressInterval = setInterval(() => {
         setProgress((prev) => Math.min(prev + 10, 90));
       }, 200);
 
@@ -84,8 +87,6 @@ export function VideoUploader({
         method: "POST",
         body: formData,
       });
-
-      clearInterval(progressInterval);
 
       const data = await response.json();
 
@@ -95,13 +96,18 @@ export function VideoUploader({
 
       setProgress(100);
       setState("success");
-      onUpload(data.storageKey);
+      onUpload(data.storageKey, data.thumbnailStorageKey);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "アップロードに失敗しました";
       setError(errorMessage);
       setState("error");
       onError?.(errorMessage);
+    } finally {
+      // 必ずインターバルをクリア（リソースリーク防止）
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
     }
   }, [category, templateId, onUpload, onError, validateFile]);
 

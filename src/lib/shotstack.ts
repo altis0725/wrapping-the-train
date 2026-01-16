@@ -2,16 +2,25 @@
  * Shotstack API連携
  *
  * ルママスク合成を使用して3つのテンプレート動画を1つに合成
- * - Track1 (Top): 車輪 + mask_wheel.png
- * - Track2 (Middle): 窓 + mask_window.png
- * - Track3 (Bottom): 背景
+ * - Track1 (Top): 車輪 + mask_wheel_inverted_v2.png
+ * - Track2 (Middle): 窓 + mask_window_inverted_v2.png
+ * - Track3 (Bottom): 背景 + mask_body_inverted_v2.png
+ *
+ * Shotstackのルママスク仕様:
+ * - 白 = 透明（穴が開く）→ 下のレイヤーが見える
+ * - 黒 = 不透明（残る）→ そのトラックの動画が見える
+ *
+ * したがってマスク画像は「見せたい部分を黒、透過させたい部分を白」で作成
+ * → mask_wheel_inverted_v2.png, mask_window_inverted_v2.png, mask_body_inverted_v2.png を使用
  */
 
 const SHOTSTACK_STAGE_URL = "https://api.shotstack.io/stage";
 const SHOTSTACK_PROD_URL = "https://api.shotstack.io/v1";
 
-// 動画の固定長（秒）
-const VIDEO_DURATION = 30;
+// セグメントの固定長（秒）- 各テンプレートは10秒
+const SEGMENT_DURATION = 10;
+// セグメント数（60秒動画）
+const SEGMENT_COUNT = 6;
 
 // テスト環境用のGitHub Raw URL（マスク画像）
 // mainブランチの公開URLを使用（Shotstackからアクセス可能）
@@ -39,6 +48,9 @@ export interface ShotstackStatusResult {
   error?: string;
 }
 
+// Shotstack 解像度オプション
+export type ShotstackResolution = "preview" | "mobile" | "sd" | "hd" | "1080";
+
 function getApiKey(environment: ShotstackEnvironment): string {
   const key =
     environment === "production"
@@ -58,86 +70,118 @@ function getBaseUrl(environment: ShotstackEnvironment): string {
   return environment === "production" ? SHOTSTACK_PROD_URL : SHOTSTACK_STAGE_URL;
 }
 
-function getMaskUrl(type: "window" | "wheel"): string {
+function getMaskUrl(type: "window" | "wheel" | "body"): string {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  // 反転済みマスク画像を使用（白黒反転版）
+  // v2: 2026-01-16 キャッシュ無効化のためリネーム
+  const maskFileName = `mask_${type}_inverted_v2.png`;
 
   // NEXT_PUBLIC_APP_URLが設定されていない場合（テスト環境など）は
   // GitHub Raw URLを使用する
   if (!baseUrl || baseUrl === "http://localhost:3000") {
-    return `${GITHUB_RAW_BASE_URL}/mask_${type}.png`;
+    return `${GITHUB_RAW_BASE_URL}/${maskFileName}`;
   }
-  
-  return `${baseUrl}/img/mask_${type}.png`;
+
+  return `${baseUrl}/img/${maskFileName}`;
 }
 
 /**
- * 3つのテンプレート動画をルママスク合成
+ * 60秒動画の入力型（新仕様）
+ * 背景6個 + 窓1個（6回ループ） + 車輪1個（6回ループ）
+ */
+export interface VideoInput {
+  backgrounds: string[];  // 6個の背景動画URL
+  window: string;         // 窓動画URL（6回ループ）
+  wheel: string;          // 車輪動画URL（6回ループ）
+}
+
+/**
+ * セグメント（10秒区間）の入力型（旧仕様・後方互換性）
+ * @deprecated 新しいVideoInputを使用してください
+ */
+export interface VideoSegment {
+  background: string;
+  window: string;
+  wheel: string;
+}
+
+/**
+ * 6セグメント（60秒）のテンプレート動画をルママスク合成
+ * 背景: 6種類の動画（各10秒）
+ * 窓: 1動画を6回ループ
+ * 車輪: 1動画を6回ループ
+ *
+ * @param input 背景6個 + 窓1個 + 車輪1個
+ * @param environment 環境 (stage or production)
+ * @param resolution 解像度 (デフォルト: sd)
  */
 export async function mergeVideos(
-  backgroundUrl: string,
-  windowUrl: string,
-  wheelUrl: string,
-  environment: ShotstackEnvironment = "stage"
+  input: VideoInput,
+  environment: ShotstackEnvironment = "stage",
+  resolution: ShotstackResolution = "sd"
 ): Promise<ShotstackRenderResult> {
+  if (input.backgrounds.length !== SEGMENT_COUNT) {
+    throw new Error(`背景は${SEGMENT_COUNT}個必要です`);
+  }
+
   const apiKey = getApiKey(environment);
   const baseUrl = getBaseUrl(environment);
 
+  // 各トラックに6セグメント分のクリップを生成
+  const wheelClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
+  const windowClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
+  const backgroundClips: Array<{ asset: { type: string; src: string }; start: number; length: number }> = [];
+
+  for (let i = 0; i < SEGMENT_COUNT; i++) {
+    const startTime = i * SEGMENT_DURATION;
+
+    // 車輪トラック（ルママスク + 動画）- 同じ動画を6回ループ
+    wheelClips.push({
+      asset: { type: "luma", src: getMaskUrl("wheel") },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+    wheelClips.push({
+      asset: { type: "video", src: input.wheel },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+
+    // 窓トラック（ルママスク + 動画）- 同じ動画を6回ループ
+    windowClips.push({
+      asset: { type: "luma", src: getMaskUrl("window") },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+    windowClips.push({
+      asset: { type: "video", src: input.window },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+
+    // 背景トラック（ルママスク + 動画）- 各セグメントで異なる動画
+    backgroundClips.push({
+      asset: { type: "luma", src: getMaskUrl("body") },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+    backgroundClips.push({
+      asset: { type: "video", src: input.backgrounds[i] },
+      start: startTime,
+      length: SEGMENT_DURATION,
+    });
+  }
+
+  // 3トラック構造: 同一トラック内に luma + video を配置
+  // Shotstack の仕様に従い、マスクは同一トラック内のクリップに適用される
   const tracks = [
-    // Top Layer: Wheel with Luma Mask
-    {
-      clips: [
-        {
-          asset: {
-            type: "luma",
-            src: getMaskUrl("wheel"),
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-        {
-          asset: {
-            type: "video",
-            src: wheelUrl,
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-      ],
-    },
-    // Middle Layer: Window with Luma Mask
-    {
-      clips: [
-        {
-          asset: {
-            type: "luma",
-            src: getMaskUrl("window"),
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-        {
-          asset: {
-            type: "video",
-            src: windowUrl,
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-      ],
-    },
-    // Bottom Layer: Background
-    {
-      clips: [
-        {
-          asset: {
-            type: "video",
-            src: backgroundUrl,
-          },
-          start: 0,
-          length: VIDEO_DURATION,
-        },
-      ],
-    },
+    // Top Layer: Wheel with Luma Mask（6セグメント分、同じ動画をループ）
+    { clips: wheelClips },
+    // Middle Layer: Window with Luma Mask（6セグメント分、同じ動画をループ）
+    { clips: windowClips },
+    // Bottom Layer: Background（6セグメント分、各セグメントで異なる動画）
+    { clips: backgroundClips },
   ];
 
   const renderPayload = {
@@ -147,7 +191,7 @@ export async function mergeVideos(
     },
     output: {
       format: "mp4",
-      resolution: "sd",
+      resolution,
     },
   };
 
@@ -182,7 +226,7 @@ export async function mergeVideos(
     }
 
     console.log(
-      `[Shotstack] Render submitted successfully (${environment}):`,
+      `[Shotstack] Render submitted successfully (${environment}, ${resolution}):`,
       renderId
     );
     return { renderId };

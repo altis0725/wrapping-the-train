@@ -3,14 +3,14 @@
 import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import type { Template } from "@/db/schema";
+import type { TemplateWithResolvedThumbnail } from "@/actions/template";
 import { Check } from "lucide-react";
 import type { KeyboardEvent } from "react";
 
 interface TemplateCardProps {
-  template: Template;
+  template: TemplateWithResolvedThumbnail;
   isSelected: boolean;
-  onSelect: (template: Template) => void;
+  onSelect: (template: TemplateWithResolvedThumbnail) => void;
 }
 
 export function TemplateCard({
@@ -41,9 +41,9 @@ export function TemplateCard({
     >
       <CardContent className="p-0 relative">
         <div className="relative aspect-video overflow-hidden rounded-t-lg">
-          {template.thumbnailUrl ? (
+          {template.resolvedThumbnailUrl ? (
             <Image
-              src={template.thumbnailUrl}
+              src={template.resolvedThumbnailUrl}
               alt={`${template.title}のテンプレートプレビュー`}
               fill
               className="object-cover"

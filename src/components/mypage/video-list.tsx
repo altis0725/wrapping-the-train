@@ -180,6 +180,7 @@ function VideoCard({
   video,
   onDelete,
   onRetry,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onReserve,
   onDownload,
   isRetrying,
@@ -198,17 +199,25 @@ function VideoCard({
     <Card data-testid="video-item" className="bg-black/40 border-white/10 overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group">
       <CardContent className="p-0">
         <div className="aspect-video bg-black/60 relative overflow-hidden group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all duration-500">
-          {video.template1?.thumbnailUrl ? (
-            <img
-              src={video.template1.thumbnailUrl}
-              alt="サムネイル"
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Play className="h-12 w-12 text-white/20 group-hover:text-cyan-400 transition-colors duration-300" />
-            </div>
-          )}
+          {(() => {
+            // 新仕様（60秒動画）を優先、なければ旧仕様（30秒動画）を使用
+            const thumbnailUrl =
+              video.background1Template?.resolvedThumbnailUrl ??
+              video.background1Template?.thumbnailUrl ??
+              video.template1?.resolvedThumbnailUrl ??
+              video.template1?.thumbnailUrl;
+            return thumbnailUrl ? (
+              <img
+                src={thumbnailUrl}
+                alt="サムネイル"
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Play className="h-12 w-12 text-white/20 group-hover:text-cyan-400 transition-colors duration-300" />
+              </div>
+            );
+          })()}
 
           {/* Status Overlay */}
           <div className="absolute top-2 right-2 flex gap-2">
@@ -255,7 +264,7 @@ function VideoCard({
             </div>
             {video.expiresAt && (
               <span className="text-orange-400/80">
-                EXP: {format(new Date(video.expiresAt), "MM/dd")}
+                期限: {format(new Date(video.expiresAt), "MM/dd")}
               </span>
             )}
           </div>
@@ -283,11 +292,12 @@ function VideoCard({
                 </Button>
                 <Button
                   size="sm"
-                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white border-0 shadow-[0_0_10px_rgba(8,145,178,0.5)]"
-                  onClick={() => onReserve(video.id)}
+                  disabled
+                  className="flex-1 bg-slate-600 text-slate-400 cursor-not-allowed border-0"
+                  aria-label="投影予約は準備中です"
                 >
                   <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                  予約
+                  準備中
                 </Button>
               </>
             )}

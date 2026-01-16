@@ -5,7 +5,7 @@
 ## 現在の状態
 
 **フェーズ**: Phase 1 MVP 完了 🎉
-**状態**: 全 Sprint 完了、デプロイ準備完了
+**状態**: 動画合成改善タスク実施中
 
 ---
 
@@ -13,74 +13,182 @@
 
 | Sprint | 内容 | 状態 | 詳細 |
 |--------|------|------|------|
-| 1 | 基盤構築 | ✅ 完了 | [sprint-1-基盤構築.md](.docs/plans/sprint-1-基盤構築.md) |
-| 2 | 認証 | ✅ 完了 | [sprint-2-認証.md](.docs/plans/sprint-2-認証.md) |
-| 3 | 公開ページ | ✅ 完了 | [sprint-3-公開ページ.md](.docs/plans/sprint-3-公開ページ.md) |
-| 4 | 動画作成（完全版） | ✅ 完了 | [sprint-4-動画作成.md](.docs/plans/sprint-4-動画作成.md) |
-| 5 | 予約・決済（整合性担保） | ✅ 完了 | [sprint-5-予約決済.md](.docs/plans/sprint-5-予約決済.md) |
-| 6 | マイページ + 管理画面 | ✅ 完了 | [sprint-6-マイページ.md](.docs/plans/sprint-6-マイページ.md) |
-| 7 | 品質・運用・バッファ | ✅ 完了 | [sprint-7-品質運用.md](.docs/plans/sprint-7-品質運用.md) |
-
----
+| 1-7 | 基盤〜品質運用 | ✅ 完了 | [.docs/plans/](.docs/plans/) 参照 |
 
 ## 追加タスク
 
 | タスク | 内容 | 状態 | 詳細 |
 |--------|------|------|------|
-| E2E強化 | LINE認証対応E2Eテスト (v2) | ✅ 完了 | [e2e-testing-enhancement.md](.docs/plans/e2e-testing-enhancement.md) |
+| E2E強化 | LINE認証対応E2Eテスト | ✅ 完了 | [archive参照](.docs/plans/archive/) |
+| 動画永続化 | 生成動画のStorage保存 | ✅ 完了 | [archive参照](.docs/plans/archive/video-persistence.md) |
+| 動画合成改善 | マスク移行+解像度+レイヤー修正 | 🔴 未着手 | 下記参照 |
+| **UI改善** | レイアウト/サムネイル/EXP表示修正 | ✅ 完了 | 下記参照 |
+| **テンプレート複製** | 同じ動画を複数カテゴリで使いまわし | ✅ 完了 | 下記参照 |
 
 ---
 
-## 再構成について (2026-01-13)
+## 🔴 動画合成改善タスク `cc:TODO`
 
-LLM Debate (Claude / Codex / Cursor) の結果、Vertical Slice アプローチに変更:
+### 問題点
 
-| 変更前 | 変更後 |
-|--------|--------|
-| Sprint 4: 動画UI のみ | Sprint 4: **完全版** (エラー処理・認可含む) |
-| Sprint 5: 予約UI のみ | Sprint 5: **整合性担保** (Cron・Webhook必須) |
-| Sprint 6: マイページ | Sprint 6: マイページ **+ 管理画面統合** |
-| Sprint 7: 管理画面 | Sprint 7: **品質・運用・バッファ** |
-| Sprint 8: 品質・運用 | **削除** (Sprint 4-7 に分散) |
+1. **マスク画像のGitHub参照** → Railway Storage へ移行
+2. **出力解像度** → 有料版を 1080p (1920x1080) に
+3. **動画の長さ** → 30秒 → 10秒に修正
+4. **レイヤー順序** → 車輪と背景が逆転している
+5. **サムネイル非表示** → Storage署名付きURL未対応
+6. **背景にマスク未適用** → `mask_body_inverted.png` を背景トラックに適用
 
-**理由**:
-- 依存関係の破綻を解消 (Sprint 5 の仮押さえ → Cron を同一 Sprint に)
-- セキュリティを DoD に含める (後付け不可)
-- 状態遷移を各 Sprint で明文化
+### 実装タスク
+
+#### Phase 1: マスク画像の Railway Storage 移行 🟢
+
+- [ ] マスク画像を Railway Storage にアップロード (`masks/mask_*.png`)
+- [ ] `src/lib/storage/resolver.ts` に `getMaskUrl()` 追加
+- [ ] `src/lib/shotstack.ts` の `getMaskUrl()` を Storage 参照に変更
+
+#### Phase 2: 動画長さの修正 🔴
+
+- [ ] `src/lib/shotstack.ts` の `VIDEO_DURATION` を `30` → `10` に変更
+
+#### Phase 3: 有料版の解像度アップグレード 🟡
+
+- [ ] `mergeVideos()` に `isPaid` パラメータ追加
+- [ ] 出力設定を分岐: 無料=`sd`、有料=`1080`
+- [ ] 呼び出し元で `video_type` に応じて `isPaid` を渡す
+
+#### Phase 4: レイヤー順序/マスク問題の修正 🔴
+
+- [ ] マスク画像の白黒を確認（Shotstack: 白部分に動画表示）
+- [ ] マスク画像を修正（白黒反転）または tracks 順序を調整
+- [ ] テスト: 車輪動画→車輪部分、背景動画→背景に正しく表示
+
+#### Phase 4.5: 背景トラックへのマスク適用 ✅ `cc:完了`
+
+- [x] `src/lib/shotstack.ts` の `getMaskUrl()` に `body` タイプを追加
+- [x] `mergeVideos()` の背景トラックにルママスク適用
+  - 変更前: `backgroundClips` は動画のみ
+  - 変更後: `luma` アセット（mask_body_inverted.png）+ 動画
+- [ ] テスト: 背景動画が `mask_body_inverted.png` でマスクされることを確認（動作テスト待ち）
+
+#### Phase 5: サムネイル表示の修正 🟡
+
+- [ ] `src/actions/template.ts` の `getAllTemplates()` を修正
+  - `thumbnailUrl` が Storage キーの場合は署名付きURLに変換
+- [ ] テスト: プレビュー画面でサムネイルが表示される
+
+### 優先度
+
+| Phase | 重要度 | 理由 |
+|-------|--------|------|
+| Phase 4 | 🔴 高 | 動画が正しく表示されないのは致命的 |
+| Phase 4.5 | 🔴 高 | 背景にマスクがないと合成が不完全 |
+| Phase 2 | 🔴 高 | テンプレートと出力の長さ不一致 |
+| Phase 5 | 🟡 中 | UX に影響、ただし動作自体は可能 |
+| Phase 3 | 🟡 中 | 有料版の品質向上 |
+| Phase 1 | 🟢 低 | 現状でも動作する |
+
+### 技術詳細
+
+#### Shotstack 解像度オプション
+- `sd` = 1024x576
+- `hd` = 1280x720
+- `1080` = 1920x1080
+
+#### 関連ファイル
+| ファイル | 変更内容 |
+|---------|---------|
+| `src/lib/shotstack.ts` | VIDEO_DURATION, resolution, getMaskUrl |
+| `src/lib/storage/resolver.ts` | getMaskUrl() 追加 |
+| `src/actions/template.ts` | サムネイルURL解決 |
+| `src/actions/video.ts` | mergeVideos 呼び出し時の isPaid |
 
 ---
 
-## 状態遷移設計
+## ✅ UI改善タスク `cc:完了`
 
-### Video
-```
-draft → rendering → ready / failed (→ retry, 最大3回)
-```
+### 問題点
 
-### Reservation
-```
-hold (15分TTL) → confirmed / expired / cancelled
-```
+| # | 問題 | 原因 | 影響度 |
+|---|------|------|--------|
+| 1 | /create の枠が左揃え | `container max-w-6xl` に `mx-auto` がない | UX |
+| 2 | /reservations の枠が左揃え | 同上 | UX |
+| 3 | マイページのサムネイルが表示されない | テンプレートの thumbnailUrl（storageKey形式）が presigned URL に変換されていない | UX |
+| 4 | テンプレートプレビューが表示されない | 同上（ただし create ページは `getAllTemplatesWithThumbnails()` を使用しているので確認必要） | UX |
+| 5 | マイページの「EXP」がわかりづらい | 英語略語が日本語ユーザーに不親切 | UX |
 
-### Payment
-```
-pending → succeeded → refunded / failed
-```
+### 実装タスク
+
+#### Task 1: レイアウト中央揃え修正 ✅
+
+- [x] `src/app/(public)/create/page.tsx` の container に `mx-auto` 追加
+- [x] `src/app/(public)/reservations/page.tsx` の container に `mx-auto` 追加
+
+#### Task 2: マイページサムネイル表示修正 ✅
+
+- [x] `src/actions/video.ts` の `getUserVideosWithTemplates()` を修正
+  - テンプレートの `thumbnailUrl` が storageKey 形式の場合、presigned URL に変換
+  - `resolveTemplateThumbnail()` 関数を追加
+  - SSRF対策（内部IP/IPv6/DNSリバインディング遮断）
+  - キャッシュによる重複API呼び出し防止
+
+#### Task 3: テンプレートプレビュー確認 ✅
+
+- [x] `/create` ページでのテンプレートプレビュー表示を確認
+  - `getAllTemplatesWithThumbnails()` が正しく presigned URL を返していることを確認
+
+#### Task 4: EXP表示の日本語化 ✅
+
+- [x] `src/components/mypage/video-list.tsx` の `EXP:` を `期限:` に変更
+
+### 関連ファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `src/app/(public)/create/page.tsx` | `mx-auto` 追加 |
+| `src/app/(public)/reservations/page.tsx` | `mx-auto` 追加 |
+| `src/actions/video.ts` | サムネイルURL解決追加 |
+| `src/components/mypage/video-list.tsx` | EXP → 期限 |
 
 ---
 
-## 設計判断ログ
+## ✅ テンプレート複製機能 `cc:完了`
 
-| 日付 | 判断 | 理由 |
-|------|------|------|
-| 2026-01-12 | ハーネス導入 | Solo モードで開発開始 |
-| 2026-01-12 | Sprint 分割 | 依存関係を考慮し8スプリントに分割 |
-| 2026-01-12 | Supabase削除 → LINE認証 | LINE Loginのみ使用、Supabase不要に |
-| 2026-01-12 | JWT + jose | Supabase Session不要、jose で軽量実装 |
-| 2026-01-13 | Plans.md 分割 | スプリントごとに .docs/plans/ に分割 |
-| 2026-01-13 | Sprint 再構成 | LLM Debate 結果を反映、Vertical Slice に変更 |
-| 2026-01-13 | Sprint 7 開発環境 | LLM Debate: ハイブリッド構成 (ローカル+Docker DB / Railway Preview) |
-| 2026-01-14 | E2E強化実装完了 | globalSetup方式 + LINE OAuth Mock + Storage State |
+### 概要
+
+管理画面で、既存テンプレートの動画を他のカテゴリ（背景/窓/車輪）で使いまわせるようにする機能。
+
+### ユースケース
+
+- 同じ動画素材を「背景」と「窓」の両方で使いたい
+- 一度アップロードした動画を複数カテゴリで活用したい
+
+### 仕様
+
+- 各テンプレートのドロップダウンメニューに「複製」オプションを追加
+- 複製先のカテゴリを選択するダイアログを表示
+- 動画ファイル（storageKey/videoUrl）とサムネイルは共有（コピーではなく参照）
+- タイトルは「元タイトル (カテゴリ名)」形式で自動生成
+- 同じカテゴリへの複製は不可
+
+### 実装タスク
+
+- [x] `src/actions/admin.ts` に `duplicateTemplate()` 関数を追加
+  - 複製元テンプレートの取得
+  - カテゴリバリデーション（1-3、同一カテゴリ禁止）
+  - 新規テンプレート作成（動画/サムネイル共有）
+  - 監査ログ記録
+- [x] `src/components/admin/template-manager.tsx` に複製UI追加
+  - ドロップダウンに「複製」メニュー追加
+  - カテゴリ選択ダイアログ作成
+  - 複製処理の実行とフィードバック
+- [x] ビルド検証
+
+### 関連ファイル
+
+| ファイル | 変更内容 |
+|---------|---------|
+| `src/actions/admin.ts` | `duplicateTemplate()` 追加 |
+| `src/components/admin/template-manager.tsx` | 複製UI追加 |
 
 ---
 
@@ -88,3 +196,4 @@ pending → succeeded → refunded / failed
 
 - **仕様書**: [.docs/spec/README.md](.docs/spec/README.md)
 - **開発ガイドライン**: [CLAUDE.md](CLAUDE.md)
+- **設計判断ログ**: [.docs/plans/archive/design-decisions.md](.docs/plans/archive/design-decisions.md)

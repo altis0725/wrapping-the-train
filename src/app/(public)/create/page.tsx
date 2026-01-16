@@ -3,7 +3,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { verifySession } from "@/lib/auth/session";
 import { COOKIE_NAME } from "@/lib/auth/constants";
-import { getAllTemplates } from "@/actions/template";
+import { getAllTemplatesWithThumbnails } from "@/actions/template";
 import { CreateVideoForm } from "@/components/create/create-video-form";
 import { cookies } from "next/headers";
 
@@ -22,7 +22,7 @@ export default async function CreatePage() {
     redirect("/login?callbackUrl=/create");
   }
 
-  const templates = await getAllTemplates();
+  const templates = await getAllTemplatesWithThumbnails();
 
   return (
     <main className="relative min-h-screen py-24 sm:py-32 overflow-hidden">
@@ -32,7 +32,7 @@ export default async function CreatePage() {
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px]" />
       </div>
 
-      <div className="container relative z-10 max-w-6xl px-4 sm:px-6 lg:px-8">
+      <div className="container relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="glass-panel p-8 md:p-12 rounded-3xl border-white/10 animate-fade-in-up shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-black/40 backdrop-blur-xl">
           <div className="space-y-12">
             <div className="text-center space-y-4">

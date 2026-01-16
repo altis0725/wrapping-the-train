@@ -6,39 +6,56 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { StepIndicator } from "./step-indicator";
 import { TemplateGrid } from "./template-grid";
+import { BackgroundGrid } from "./background-grid";
 import { VideoPreview } from "./video-preview";
 import { useVideoStatus } from "./use-video-status";
 import { createVideo, retryVideo } from "@/actions/video";
-import type { Template } from "@/db/schema";
 import { VIDEO_STATUS } from "@/db/schema";
+import type { TemplateWithResolvedThumbnail } from "@/actions/template";
 import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 
+// 新仕様: 60秒動画（背景6個 + 窓1個 + 車輪1個）
+const BACKGROUND_COUNT = 6;
+
 const STEPS = [
-  { label: "背景", description: "背景の映像を選択" },
-  { label: "窓", description: "窓の映像を選択" },
-  { label: "車輪", description: "車輪の映像を選択" },
+  { label: "背景", description: "6つの背景映像を選択" },
+  { label: "窓", description: "窓の映像を1つ選択" },
+  { label: "車輪", description: "車輪の映像を1つ選択" },
 ];
 
 interface CreateVideoFormProps {
   templates: {
-    background: Template[];
-    window: Template[];
-    wheel: Template[];
+    background: TemplateWithResolvedThumbnail[];
+    window: TemplateWithResolvedThumbnail[];
+    wheel: TemplateWithResolvedThumbnail[];
   };
 }
 
 type Step = 0 | 1 | 2;
 
+// 新仕様の選択状態
+interface VideoSelection {
+  backgrounds: (TemplateWithResolvedThumbnail | null)[];  // 6個の配列
+  window: TemplateWithResolvedThumbnail | null;
+  wheel: TemplateWithResolvedThumbnail | null;
+}
+
 export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  // 選択状態管理（新仕様）
+  const [selection, setSelection] = useState<VideoSelection>({
+    backgrounds: Array(BACKGROUND_COUNT).fill(null),
+    window: null,
+    wheel: null,
+  });
+
+  // 現在のステップ（0: 背景, 1: 窓, 2: 車輪）
   const [currentStep, setCurrentStep] = useState<Step>(0);
-  const [selectedBackground, setSelectedBackground] = useState<Template | null>(
-    null
-  );
-  const [selectedWindow, setSelectedWindow] = useState<Template | null>(null);
-  const [selectedWheel, setSelectedWheel] = useState<Template | null>(null);
+
+  // 背景選択時のアクティブスロット
+  const [activeBackgroundSlot, setActiveBackgroundSlot] = useState<number | null>(0);
 
   const [createdVideoId, setCreatedVideoId] = useState<number | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -49,58 +66,13 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
     enabled: createdVideoId !== null,
   });
 
-  // 現在のステップのテンプレート一覧を取得
-  const getCurrentTemplates = (): Template[] => {
-    switch (currentStep) {
-      case 0:
-        return templates.background;
-      case 1:
-        return templates.window;
-      case 2:
-        return templates.wheel;
-      default:
-        return [];
-    }
-  };
-
-  // 現在のステップで選択されているテンプレートID
-  const getCurrentSelectedId = (): number | null => {
-    switch (currentStep) {
-      case 0:
-        return selectedBackground?.id ?? null;
-      case 1:
-        return selectedWindow?.id ?? null;
-      case 2:
-        return selectedWheel?.id ?? null;
-      default:
-        return null;
-    }
-  };
-
-  // テンプレート選択ハンドラ
-  const handleSelectTemplate = useCallback(
-    (template: Template) => {
-      switch (currentStep) {
-        case 0:
-          setSelectedBackground(template);
-          break;
-        case 1:
-          setSelectedWindow(template);
-          break;
-        case 2:
-          setSelectedWheel(template);
-          break;
-      }
-    },
-    [currentStep]
-  );
-
   // 完了したステップの配列
   const getCompletedSteps = (): number[] => {
     const completed: number[] = [];
-    if (selectedBackground) completed.push(0);
-    if (selectedWindow) completed.push(1);
-    if (selectedWheel) completed.push(2);
+    const allBackgroundsSelected = selection.backgrounds.every((bg) => bg !== null);
+    if (allBackgroundsSelected) completed.push(0);
+    if (selection.window) completed.push(1);
+    if (selection.wheel) completed.push(2);
     return completed;
   };
 
@@ -108,19 +80,82 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   const canProceed = (): boolean => {
     switch (currentStep) {
       case 0:
-        return selectedBackground !== null;
+        return selection.backgrounds.every((bg) => bg !== null);
       case 1:
-        return selectedWindow !== null;
+        return selection.window !== null;
       case 2:
-        return selectedWheel !== null;
+        return selection.wheel !== null;
       default:
         return false;
     }
   };
 
+  // 背景スロットをクリック
+  const handleBackgroundSlotClick = (slotIndex: number) => {
+    setActiveBackgroundSlot(slotIndex);
+  };
+
+  // 背景テンプレートを選択
+  const handleBackgroundSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      if (activeBackgroundSlot === null) return;
+
+      setSelection((prev) => {
+        const newBackgrounds = [...prev.backgrounds];
+        newBackgrounds[activeBackgroundSlot] = template;
+
+        // setSelection内で新しい配列を使って次スロットを計算（stale closure回避）
+        const nextEmptySlot = newBackgrounds.findIndex(
+          (bg, idx) => bg === null && idx !== activeBackgroundSlot
+        );
+        if (nextEmptySlot !== -1) {
+          setActiveBackgroundSlot(nextEmptySlot);
+        } else {
+          // 全スロット選択済み
+          setActiveBackgroundSlot(null);
+        }
+
+        return { ...prev, backgrounds: newBackgrounds };
+      });
+    },
+    [activeBackgroundSlot]
+  );
+
+  // 窓テンプレートを選択
+  const handleWindowSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      setSelection((prev) => ({ ...prev, window: template }));
+    },
+    []
+  );
+
+  // 車輪テンプレートを選択
+  const handleWheelSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      setSelection((prev) => ({ ...prev, wheel: template }));
+    },
+    []
+  );
+
+  // 次へボタンのハンドラ
+  const handleNext = () => {
+    if (currentStep < 2) {
+      setCurrentStep((prev) => (prev + 1) as Step);
+    }
+  };
+
+  // 戻るボタンのハンドラ
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep((prev) => (prev - 1) as Step);
+    }
+  };
+
   // 動画作成
   const handleCreateVideo = async () => {
-    if (!selectedBackground || !selectedWindow || !selectedWheel) {
+    // 全選択が完了しているか確認
+    const allBackgroundsSelected = selection.backgrounds.every((bg) => bg !== null);
+    if (!allBackgroundsSelected || !selection.window || !selection.wheel) {
       setCreateError("すべてのテンプレートを選択してください");
       return;
     }
@@ -129,9 +164,9 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
 
     startTransition(async () => {
       const result = await createVideo({
-        template1Id: selectedBackground.id,
-        template2Id: selectedWindow.id,
-        template3Id: selectedWheel.id,
+        backgrounds: selection.backgrounds.map((bg) => bg!.id),
+        windowTemplateId: selection.window!.id,
+        wheelTemplateId: selection.wheel!.id,
       });
 
       if (result.success) {
@@ -166,7 +201,13 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
 
     return (
       <div className="space-y-8">
-        <div className="text-center space-y-2">
+        {/* ライブリージョンで状態変化を通知 */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="text-center space-y-2"
+        >
           <h2 className="text-2xl font-bold">
             {isProcessing && "動画を生成しています..."}
             {isCompleted && "動画が完成しました！"}
@@ -174,7 +215,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
           </h2>
           {isProcessing && (
             <p className="text-muted-foreground">
-              しばらくお待ちください（1〜2分程度）
+              しばらくお待ちください（2〜3分程度）
             </p>
           )}
         </div>
@@ -182,20 +223,24 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
         {/* プログレス表示 */}
         {isProcessing && (
           <div className="max-w-md mx-auto space-y-2">
-            <Progress value={undefined} className="animate-pulse" />
-            <p className="text-sm text-center text-muted-foreground">
-              処理中...
+            <Progress
+              value={undefined}
+              className="animate-pulse"
+              aria-label="動画生成中"
+            />
+            <p className="text-sm text-center text-muted-foreground" aria-hidden="true">
+              60秒動画を生成中...
             </p>
           </div>
         )}
 
-        {/* プレビュー */}
+        {/* プレビュー（背景1のサムネイル表示） */}
         <div className="max-w-2xl mx-auto">
           <VideoPreview
             selectedTemplates={{
-              background: selectedBackground,
-              window: selectedWindow,
-              wheel: selectedWheel,
+              background: selection.backgrounds[0],
+              window: selection.window,
+              wheel: selection.wheel,
             }}
             isGenerating={isProcessing}
             generatedVideoUrl={videoUrl}
@@ -204,14 +249,19 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
 
         {/* エラー表示 */}
         {(isFailed || createError || error) && (
-          <div className="max-w-md mx-auto bg-destructive/10 text-destructive p-4 rounded-lg text-center">
-            <p>{createError || error || "エラーが発生しました"}</p>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="max-w-md mx-auto bg-destructive/10 text-destructive p-4 rounded-lg text-center"
+          >
+            <p id="error-message">{createError || error || "エラーが発生しました"}</p>
             {canRetry && (
               <Button
                 variant="outline"
                 className="mt-4"
                 onClick={handleRetry}
                 disabled={isPending}
+                aria-describedby="error-message"
               >
                 {isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -227,11 +277,19 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
         {/* 完了時のアクション */}
         {isCompleted && (
           <div className="flex justify-center gap-4">
-            <Button variant="outline" onClick={() => router.push("/mypage")}>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/mypage")}
+              aria-label="作成した動画をマイページで確認"
+            >
               マイページで確認
             </Button>
-            <Button onClick={() => router.push("/reservations")}>
-              投影を予約する
+            <Button
+              disabled
+              className="bg-slate-600 text-slate-400 cursor-not-allowed"
+              aria-label="投影予約は準備中です"
+            >
+              投影予約（準備中）
             </Button>
           </div>
         )}
@@ -250,42 +308,55 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
       />
 
       {/* メインコンテンツ */}
-      <div className="grid md:grid-cols-2 gap-8">
-        {/* 左: プレビュー */}
-        <div className="order-2 md:order-1">
-          <div className="sticky top-4">
-            <h3 className="font-medium mb-4">プレビュー</h3>
-            <VideoPreview
-              selectedTemplates={{
-                background: selectedBackground,
-                window: selectedWindow,
-                wheel: selectedWheel,
-              }}
-            />
-          </div>
-        </div>
+      <div className="space-y-6">
+        {/* Step 0: 背景6個選択 */}
+        {currentStep === 0 && (
+          <BackgroundGrid
+            templates={templates.background}
+            selectedBackgrounds={selection.backgrounds}
+            activeSlot={activeBackgroundSlot}
+            onSlotClick={handleBackgroundSlotClick}
+            onTemplateSelect={handleBackgroundSelect}
+          />
+        )}
 
-        {/* 右: テンプレート選択 */}
-        <div className="order-1 md:order-2">
+        {/* Step 1: 窓選択 */}
+        {currentStep === 1 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-medium" data-testid="category">
-                {STEPS[currentStep].label}を選択
+                窓を選択
               </h3>
               <span className="text-sm text-muted-foreground">
-                {STEPS[currentStep].description}
+                6セグメント全体で同じ映像を使用
               </span>
             </div>
-
-            <div data-testid="template-selector">
-              <TemplateGrid
-                templates={getCurrentTemplates()}
-                selectedId={getCurrentSelectedId()}
-                onSelect={handleSelectTemplate}
-              />
-            </div>
+            <TemplateGrid
+              templates={templates.window}
+              selectedId={selection.window?.id ?? null}
+              onSelect={handleWindowSelect}
+            />
           </div>
-        </div>
+        )}
+
+        {/* Step 2: 車輪選択 */}
+        {currentStep === 2 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium" data-testid="category">
+                車輪を選択
+              </h3>
+              <span className="text-sm text-muted-foreground">
+                6セグメント全体で同じ映像を使用
+              </span>
+            </div>
+            <TemplateGrid
+              templates={templates.wheel}
+              selectedId={selection.wheel?.id ?? null}
+              onSelect={handleWheelSelect}
+            />
+          </div>
+        )}
       </div>
 
       {/* エラー表示 */}
@@ -299,7 +370,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
       <div className="flex justify-between">
         <Button
           variant="outline"
-          onClick={() => setCurrentStep((prev) => (prev - 1) as Step)}
+          onClick={handleBack}
           disabled={currentStep === 0}
         >
           <ChevronLeft className="h-4 w-4 mr-2" />
@@ -307,33 +378,51 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
         </Button>
 
         {currentStep < 2 ? (
-          <Button
-            onClick={() => setCurrentStep((prev) => (prev + 1) as Step)}
-            disabled={!canProceed()}
-          >
+          <Button onClick={handleNext} disabled={!canProceed()}>
             次へ
             <ChevronRight className="h-4 w-4 ml-2" />
           </Button>
         ) : (
-          <Button
-            onClick={handleCreateVideo}
-            disabled={
-              !selectedBackground ||
-              !selectedWindow ||
-              !selectedWheel ||
-              isPending
-            }
-          >
+          <Button onClick={handleCreateVideo} disabled={isPending || !canProceed()}>
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 作成中...
               </>
             ) : (
-              "動画を作成"
+              "動画を作成（60秒）"
             )}
           </Button>
         )}
+      </div>
+
+      {/* 選択サマリー */}
+      <div className="border-t pt-6">
+        <h3 className="font-medium mb-4">選択内容</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <span className="text-muted-foreground">背景:</span>
+            <span className="ml-2">
+              {selection.backgrounds.filter((bg) => bg !== null).length} / 6
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">窓:</span>
+            <span className="ml-2">
+              {selection.window ? selection.window.title : "未選択"}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">車輪:</span>
+            <span className="ml-2">
+              {selection.wheel ? selection.wheel.title : "未選択"}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">動画長:</span>
+            <span className="ml-2">60秒</span>
+          </div>
+        </div>
       </div>
     </div>
   );

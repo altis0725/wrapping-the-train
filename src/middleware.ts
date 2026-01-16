@@ -48,11 +48,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 静的ファイル、API、認証エンドポイントはスキップ
+  // 注: 静的ファイルは matcher で除外済み（favicon.ico, *.svg, *.png 等）
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/webhooks") ||
-    pathname.includes(".") // 静的ファイル
+    pathname.startsWith("/api/admin/templates/upload") // 大きなファイルアップロード（認証は route.ts で実施）
   ) {
     return NextResponse.next();
   }
@@ -113,8 +114,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public files (images, etc.)
+     * - public files (images, videos, etc.)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|mov)$).*)",
   ],
 };

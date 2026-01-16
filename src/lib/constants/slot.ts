@@ -22,6 +22,9 @@ export const TIMEZONE = "Asia/Tokyo";
 // 投影料金（円）
 export const PROJECTION_PRICE = 5000;
 
+// 1スロットあたりの最大予約数
+export const MAX_RESERVATIONS_PER_SLOT = 4;
+
 /**
  * スロット番号から開始時刻を取得
  */

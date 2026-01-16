@@ -9,7 +9,6 @@ import {
   boolean,
   jsonb,
   index,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -58,10 +57,30 @@ export const videos = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id),
+    // === 新仕様: 60秒動画（背景6個 + 窓1個 + 車輪1個） ===
+    background1TemplateId: integer("background1_template_id").references(() => templates.id),
+    background2TemplateId: integer("background2_template_id").references(() => templates.id),
+    background3TemplateId: integer("background3_template_id").references(() => templates.id),
+    background4TemplateId: integer("background4_template_id").references(() => templates.id),
+    background5TemplateId: integer("background5_template_id").references(() => templates.id),
+    background6TemplateId: integer("background6_template_id").references(() => templates.id),
+    windowTemplateId: integer("window_template_id").references(() => templates.id),
+    wheelTemplateId: integer("wheel_template_id").references(() => templates.id),
+    // === 旧仕様: 30秒動画（後方互換性のため残す） ===
+    // セグメント1（0-10秒）
     template1Id: integer("template1_id").references(() => templates.id),
     template2Id: integer("template2_id").references(() => templates.id),
     template3Id: integer("template3_id").references(() => templates.id),
+    // セグメント2（10-20秒）
+    segment2Template1Id: integer("segment2_template1_id").references(() => templates.id),
+    segment2Template2Id: integer("segment2_template2_id").references(() => templates.id),
+    segment2Template3Id: integer("segment2_template3_id").references(() => templates.id),
+    // セグメント3（20-30秒）
+    segment3Template1Id: integer("segment3_template1_id").references(() => templates.id),
+    segment3Template2Id: integer("segment3_template2_id").references(() => templates.id),
+    segment3Template3Id: integer("segment3_template3_id").references(() => templates.id),
     videoUrl: varchar("video_url", { length: 512 }),
+    storageKey: varchar("storage_key", { length: 512 }), // Railway Storage Bucket のキー
     videoType: varchar("video_type", { length: 20 }).notNull().default("free"),
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     renderId: varchar("render_id", { length: 255 }),
@@ -75,6 +94,8 @@ export const videos = pgTable(
     index("videos_expires_idx")
       .on(table.expiresAt)
       .where(sql`${table.expiresAt} IS NOT NULL`),
+    // パフォーマンス改善: getUserVideos() の ORDER BY created_at DESC をカバー
+    index("videos_user_created_idx").on(table.userId, table.createdAt),
   ]
 );
 
@@ -83,6 +104,41 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
     fields: [videos.userId],
     references: [users.id],
   }),
+  // === 新仕様: 60秒動画 ===
+  background1Template: one(templates, {
+    fields: [videos.background1TemplateId],
+    references: [templates.id],
+  }),
+  background2Template: one(templates, {
+    fields: [videos.background2TemplateId],
+    references: [templates.id],
+  }),
+  background3Template: one(templates, {
+    fields: [videos.background3TemplateId],
+    references: [templates.id],
+  }),
+  background4Template: one(templates, {
+    fields: [videos.background4TemplateId],
+    references: [templates.id],
+  }),
+  background5Template: one(templates, {
+    fields: [videos.background5TemplateId],
+    references: [templates.id],
+  }),
+  background6Template: one(templates, {
+    fields: [videos.background6TemplateId],
+    references: [templates.id],
+  }),
+  windowTemplate: one(templates, {
+    fields: [videos.windowTemplateId],
+    references: [templates.id],
+  }),
+  wheelTemplate: one(templates, {
+    fields: [videos.wheelTemplateId],
+    references: [templates.id],
+  }),
+  // === 旧仕様: 30秒動画（後方互換性） ===
+  // セグメント1
   template1: one(templates, {
     fields: [videos.template1Id],
     references: [templates.id],
@@ -93,6 +149,32 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
   }),
   template3: one(templates, {
     fields: [videos.template3Id],
+    references: [templates.id],
+  }),
+  // セグメント2
+  segment2Template1: one(templates, {
+    fields: [videos.segment2Template1Id],
+    references: [templates.id],
+  }),
+  segment2Template2: one(templates, {
+    fields: [videos.segment2Template2Id],
+    references: [templates.id],
+  }),
+  segment2Template3: one(templates, {
+    fields: [videos.segment2Template3Id],
+    references: [templates.id],
+  }),
+  // セグメント3
+  segment3Template1: one(templates, {
+    fields: [videos.segment3Template1Id],
+    references: [templates.id],
+  }),
+  segment3Template2: one(templates, {
+    fields: [videos.segment3Template2Id],
+    references: [templates.id],
+  }),
+  segment3Template3: one(templates, {
+    fields: [videos.segment3Template3Id],
     references: [templates.id],
   }),
   reservations: many(reservations),
@@ -132,10 +214,10 @@ export const reservations = pgTable(
       .where(sql`${table.status} = 'hold'`),
     index("reservations_idempotency_key_idx").on(table.idempotencyKey),
     index("reservations_updated_at_idx").on(table.updatedAt),
-    // 同一スロットの二重予約防止（有効な予約のみ対象）
-    uniqueIndex("reservations_slot_unique")
-      .on(table.projectionDate, table.slotNumber)
-      .where(sql`${table.status} NOT IN ('expired', 'cancelled')`),
+    // パフォーマンス改善: getUserReservations() の ORDER BY projection_date DESC をカバー
+    index("reservations_user_date_idx").on(table.userId, table.projectionDate),
+    // 1スロット4予約まで許可するため、ユニーク制約を削除
+    // 代わりにアプリケーションレベルでカウントチェック
   ]
 );
 
