@@ -36,7 +36,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff, Upload, Link } from "lucide-react";
+import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff, Upload, Link, Copy } from "lucide-react";
 import type { Template } from "@/db/schema";
 import { VideoUploader } from "./video-uploader";
 import { TEMPLATE_CATEGORY } from "@/db/schema";
@@ -50,6 +50,7 @@ import {
   updateTemplate,
   deleteTemplate,
   toggleTemplateActive,
+  duplicateTemplate,
   type TemplateInput,
 } from "@/actions/admin";
 
@@ -67,8 +68,11 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [deletingTemplate, setDeletingTemplate] = useState<Template | null>(null);
+  const [duplicatingTemplate, setDuplicatingTemplate] = useState<Template | null>(null);
+  const [duplicateTargetCategory, setDuplicateTargetCategory] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -181,6 +185,40 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
     router.refresh();
   };
 
+  const openDuplicateDialog = (template: Template) => {
+    setDuplicatingTemplate(template);
+    setDuplicateTargetCategory(null);
+    setError(null);
+    setDuplicateDialogOpen(true);
+  };
+
+  const handleDuplicate = async () => {
+    if (!duplicatingTemplate || duplicateTargetCategory === null) return;
+
+    setIsSubmitting(true);
+    setError(null);
+
+    const result = await duplicateTemplate(duplicatingTemplate.id, duplicateTargetCategory);
+
+    if (result.success) {
+      setDuplicateDialogOpen(false);
+      router.refresh();
+    } else {
+      setError(result.error || "複製に失敗しました");
+    }
+
+    setIsSubmitting(false);
+  };
+
+  // 複製先として選択可能なカテゴリ（現在のカテゴリを除く）
+  const getAvailableCategories = (currentCategory: number) => {
+    return [
+      TEMPLATE_CATEGORY.BACKGROUND,
+      TEMPLATE_CATEGORY.WINDOW,
+      TEMPLATE_CATEGORY.WHEEL,
+    ].filter((cat) => cat !== currentCategory);
+  };
+
   // カテゴリでグループ化
   const groupedTemplates = [
     TEMPLATE_CATEGORY.BACKGROUND,
@@ -256,6 +294,10 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                             <DropdownMenuItem onClick={() => openEditDialog(template)}>
                               <Pencil className="h-4 w-4 mr-2" />
                               編集
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDuplicateDialog(template)}>
+                              <Copy className="h-4 w-4 mr-2" />
+                              複製
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleToggleActive(template)}>
                               {template.isActive === 1 ? (
@@ -475,6 +517,46 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
               {isSubmitting ? "削除中..." : "削除"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 複製ダイアログ */}
+      <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>テンプレートを複製</DialogTitle>
+            <DialogDescription>
+              「{duplicatingTemplate?.title}」を別のカテゴリに複製します。
+              動画とサムネイルは共有されます。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label>複製先カテゴリ</Label>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {duplicatingTemplate && getAvailableCategories(duplicatingTemplate.category).map((cat) => (
+                <Button
+                  key={cat}
+                  variant={duplicateTargetCategory === cat ? "default" : "outline"}
+                  onClick={() => setDuplicateTargetCategory(cat)}
+                  className="justify-start"
+                >
+                  {categoryLabels[cat]}
+                </Button>
+              ))}
+            </div>
+            {error && <p className="text-sm text-destructive mt-2">{error}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button
+              onClick={handleDuplicate}
+              disabled={isSubmitting || duplicateTargetCategory === null}
+            >
+              {isSubmitting ? "複製中..." : "複製"}
             </Button>
           </DialogFooter>
         </DialogContent>

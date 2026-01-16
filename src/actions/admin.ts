@@ -11,6 +11,7 @@ import {
   adminAuditLogs,
   RESERVATION_STATUS,
   PAYMENT_STATUS,
+  TEMPLATE_CATEGORY,
   type Template,
   type Reservation,
   type ProjectionSchedule,
@@ -193,6 +194,79 @@ export async function toggleTemplateActive(
   } catch (error) {
     console.error("[toggleTemplateActive] Error:", error);
     return { success: false, error: "ステータスの更新に失敗しました" };
+  }
+}
+
+// カテゴリ名マッピング（TEMPLATE_CATEGORY と SSOT）
+const CATEGORY_LABELS: Record<number, string> = {
+  [TEMPLATE_CATEGORY.BACKGROUND]: "背景",
+  [TEMPLATE_CATEGORY.WINDOW]: "窓",
+  [TEMPLATE_CATEGORY.WHEEL]: "車輪",
+};
+
+// 有効なカテゴリ値の配列（number[] にキャストして includes を使えるように）
+const VALID_CATEGORIES: number[] = Object.values(TEMPLATE_CATEGORY);
+
+export async function duplicateTemplate(
+  sourceId: number,
+  targetCategory: number
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin();
+
+    // カテゴリのバリデーション（TEMPLATE_CATEGORY と SSOT）
+    if (!VALID_CATEGORIES.includes(targetCategory)) {
+      return { success: false, error: "カテゴリが不正です" };
+    }
+
+    // 複製元テンプレートを取得
+    const sourceTemplate = await db
+      .select()
+      .from(templates)
+      .where(eq(templates.id, sourceId))
+      .limit(1);
+
+    if (!sourceTemplate[0]) {
+      return { success: false, error: "テンプレートが見つかりません" };
+    }
+
+    const source = sourceTemplate[0];
+
+    // 同じカテゴリへの複製は許可しない
+    if (source.category === targetCategory) {
+      return { success: false, error: "同じカテゴリへの複製はできません" };
+    }
+
+    // 新しいテンプレートを作成（動画とサムネイルは共有）
+    const result = await db.insert(templates).values({
+      category: targetCategory,
+      title: `${source.title} (${CATEGORY_LABELS[targetCategory]})`,
+      videoUrl: source.videoUrl,
+      storageKey: source.storageKey,
+      thumbnailUrl: source.thumbnailUrl,
+      displayOrder: 0,
+      isActive: 1,
+    }).returning();
+
+    // returning() の結果チェック
+    if (!result[0]) {
+      return { success: false, error: "テンプレートの作成に失敗しました" };
+    }
+
+    const newTemplate = result[0];
+
+    await logAuditAction(admin.id, "DUPLICATE", "template", newTemplate.id, {
+      sourceId,
+      sourceTitle: source.title,
+      sourceCategory: source.category,
+      targetCategory,
+    });
+
+    revalidatePath("/admin/templates");
+    return { success: true };
+  } catch (error) {
+    console.error("[duplicateTemplate] Error:", error);
+    return { success: false, error: "テンプレートの複製に失敗しました" };
   }
 }
 
