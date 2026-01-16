@@ -285,10 +285,11 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
               マイページで確認
             </Button>
             <Button
-              onClick={() => router.push("/reservations")}
-              aria-label="作成した動画の投影を予約"
+              disabled
+              className="bg-slate-600 text-slate-400 cursor-not-allowed"
+              aria-label="投影予約は準備中です"
             >
-              投影を予約する
+              投影予約（準備中）
             </Button>
           </div>
         )}

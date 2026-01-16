@@ -180,6 +180,7 @@ function VideoCard({
   video,
   onDelete,
   onRetry,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onReserve,
   onDownload,
   isRetrying,
@@ -291,11 +292,12 @@ function VideoCard({
                 </Button>
                 <Button
                   size="sm"
-                  className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white border-0 shadow-[0_0_10px_rgba(8,145,178,0.5)]"
-                  onClick={() => onReserve(video.id)}
+                  disabled
+                  className="flex-1 bg-slate-600 text-slate-400 cursor-not-allowed border-0"
+                  aria-label="投影予約は準備中です"
                 >
                   <Calendar className="h-3.5 w-3.5 mr-1.5" />
-                  予約
+                  準備中
                 </Button>
               </>
             )}

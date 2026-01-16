@@ -233,8 +233,8 @@ export default function Home() {
 
                   {plan.popular && (
                     <div className="absolute top-0 right-0 p-4 z-10">
-                      <span className="bg-purple-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(147,51,234,0.5)] font-orbitron tracking-wider">
-                        RECOMMENDED
+                      <span className="bg-slate-600 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-[0_0_15px_rgba(100,116,139,0.5)] font-orbitron tracking-wider">
+                        準備中
                       </span>
                     </div>
                   )}
