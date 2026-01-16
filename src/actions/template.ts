@@ -33,8 +33,20 @@ function normalizeStorageKey(url: string): string {
 }
 
 /**
+ * 許可された相対パス（内部アセット）かどうかを判定
+ * セキュリティ: 許可するパスプレフィックスをホワイトリストで限定
+ */
+function isAllowedRelativePath(url: string): boolean {
+  const allowedPrefixes = ["/img/", "/video/", "/assets/", "/thumbnails/"];
+  const trimmed = url.trim();
+  return allowedPrefixes.some((prefix) => trimmed.startsWith(prefix));
+}
+
+/**
  * テンプレートのサムネイルURLを解決
  * storageKey形式の場合はPresigned URLを生成
+ * 相対パスの場合はそのまま使用（内部アセット）
+ * 外部URLの場合はhttps かつ安全なホストのみ許可
  */
 async function resolveTemplateThumbnail(
   template: Template
@@ -59,6 +71,9 @@ async function resolveTemplateThumbnail(
         error instanceof Error ? error.message : error
       );
     }
+  } else if (isAllowedRelativePath(thumbnailUrl)) {
+    // 許可された相対パス（/img/... など）は内部アセットとしてそのまま使用
+    resolvedThumbnailUrl = thumbnailUrl;
   } else if (isValidExternalUrl(thumbnailUrl)) {
     // 外部 URL の場合はhttpsスキームかつ内部ホストでないことを検証
     resolvedThumbnailUrl = thumbnailUrl;
