@@ -42,6 +42,9 @@ export type TemplateWithResolvedThumbnail = Template & {
 };
 
 export type VideoWithTemplates = Video & {
+  // 新仕様（60秒動画）- サムネイル表示用に background1 のみ解決
+  background1Template?: TemplateWithResolvedThumbnail | null;
+  // 旧仕様（30秒動画）- 後方互換性
   template1?: TemplateWithResolvedThumbnail | null;
   template2?: TemplateWithResolvedThumbnail | null;
   template3?: TemplateWithResolvedThumbnail | null;
@@ -596,22 +599,31 @@ export async function getUserVideosWithTemplates(): Promise<VideoWithTemplates[]
       }
 
       // テンプレートのサムネイルURLを解決（キャッシュで重複呼び出し防止）
+      // 旧仕様（30秒動画）
       const template1 = video.template1Id ? templateMap.get(video.template1Id) : null;
       const template2 = video.template2Id ? templateMap.get(video.template2Id) : null;
       const template3 = video.template3Id ? templateMap.get(video.template3Id) : null;
+      // 新仕様（60秒動画）- サムネイル表示用に background1 のみ解決
+      const background1 = video.background1TemplateId
+        ? templateMap.get(video.background1TemplateId)
+        : null;
 
-      const [resolvedTemplate1, resolvedTemplate2, resolvedTemplate3] = await Promise.all([
+      const [resolvedTemplate1, resolvedTemplate2, resolvedTemplate3, resolvedBackground1] = await Promise.all([
         template1 ? resolveTemplateThumbnail(template1, thumbnailCache) : null,
         template2 ? resolveTemplateThumbnail(template2, thumbnailCache) : null,
         template3 ? resolveTemplateThumbnail(template3, thumbnailCache) : null,
+        background1 ? resolveTemplateThumbnail(background1, thumbnailCache) : null,
       ]);
 
       return {
         ...video,
         videoUrl: resolvedVideoUrl,
+        // 旧仕様（30秒動画）
         template1: resolvedTemplate1,
         template2: resolvedTemplate2,
         template3: resolvedTemplate3,
+        // 新仕様（60秒動画）
+        background1Template: resolvedBackground1,
       };
     })
   );

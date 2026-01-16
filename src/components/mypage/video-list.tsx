@@ -198,17 +198,25 @@ function VideoCard({
     <Card data-testid="video-item" className="bg-black/40 border-white/10 overflow-hidden hover:border-cyan-500/50 transition-all duration-300 group">
       <CardContent className="p-0">
         <div className="aspect-video bg-black/60 relative overflow-hidden group-hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all duration-500">
-          {(video.template1?.resolvedThumbnailUrl || video.template1?.thumbnailUrl) ? (
-            <img
-              src={video.template1.resolvedThumbnailUrl ?? video.template1.thumbnailUrl ?? undefined}
-              alt="サムネイル"
-              className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Play className="h-12 w-12 text-white/20 group-hover:text-cyan-400 transition-colors duration-300" />
-            </div>
-          )}
+          {(() => {
+            // 新仕様（60秒動画）を優先、なければ旧仕様（30秒動画）を使用
+            const thumbnailUrl =
+              video.background1Template?.resolvedThumbnailUrl ??
+              video.background1Template?.thumbnailUrl ??
+              video.template1?.resolvedThumbnailUrl ??
+              video.template1?.thumbnailUrl;
+            return thumbnailUrl ? (
+              <img
+                src={thumbnailUrl}
+                alt="サムネイル"
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Play className="h-12 w-12 text-white/20 group-hover:text-cyan-400 transition-colors duration-300" />
+              </div>
+            );
+          })()}
 
           {/* Status Overlay */}
           <div className="absolute top-2 right-2 flex gap-2">
