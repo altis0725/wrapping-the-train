@@ -88,12 +88,13 @@ function getMaskUrl(type: "window" | "wheel" | "body"): string {
 
 /**
  * 60秒動画の入力型（新仕様）
- * 背景6個 + 窓1個（6回ループ） + 車輪1個（6回ループ）
+ * 背景6個 + 窓1個（6回ループ） + 車輪1個（6回ループ） + 音楽1個（オプション）
  */
 export interface VideoInput {
   backgrounds: string[];  // 6個の背景動画URL
   window: string;         // 窓動画URL（6回ループ）
   wheel: string;          // 車輪動画URL（6回ループ）
+  music?: string;         // 音楽URL（オプション）
 }
 
 /**
@@ -188,6 +189,14 @@ export async function mergeVideos(
     timeline: {
       background: "#000000",
       tracks,
+      // 音楽が指定されている場合のみ soundtrack を追加
+      ...(input.music && {
+        soundtrack: {
+          src: input.music,
+          effect: "fadeOut",  // 最後にフェードアウト
+          volume: 0.8,        // 80%音量
+        },
+      }),
     },
     output: {
       format: "mp4",

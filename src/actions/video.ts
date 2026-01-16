@@ -7,12 +7,13 @@ import {
   templates,
   VIDEO_STATUS,
   RESERVATION_STATUS,
+  TEMPLATE_CATEGORY,
   type Video,
   type Template,
 } from "@/db/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCurrentUser } from "@/lib/auth/session";
-import { validateVideoTemplates } from "./template";
+import { validateVideoTemplates, getTemplatesByIds } from "./template";
 import {
   createVideoSchema,
   videoIdSchema,
@@ -25,7 +26,7 @@ import {
   type ShotstackResolution,
   type VideoInput,
 } from "@/lib/shotstack";
-import { getTemplateVideoUrl, getVideoUrl, getThumbnailUrl } from "@/lib/storage/resolver";
+import { getTemplateVideoUrl, getVideoUrl, getThumbnailUrl, getMusicUrl } from "@/lib/storage/resolver";
 import { deleteStorageFile } from "@/lib/storage/upload";
 import { isStorageConfigured } from "@/lib/storage/client";
 import { isValidExternalUrl } from "@/lib/validations/url";
@@ -80,13 +81,14 @@ export async function createVideo(
     return { success: false, error: parsed.error.errors[0]?.message || "入力が不正です" };
   }
 
-  const { backgrounds, windowTemplateId, wheelTemplateId } = parsed.data;
+  const { backgrounds, windowTemplateId, wheelTemplateId, musicTemplateId } = parsed.data;
 
   // テンプレートを一括検証（クエリ最適化）
   const validation = await validateVideoTemplates({
     backgrounds,
     windowTemplateId,
     wheelTemplateId,
+    musicTemplateId,
   });
 
   if (!validation.valid) {
@@ -111,6 +113,7 @@ export async function createVideo(
       background6TemplateId: backgrounds[5],
       windowTemplateId,
       wheelTemplateId,
+      musicTemplateId,
       status: VIDEO_STATUS.PENDING,
       videoType: "free",
       expiresAt,
@@ -119,24 +122,26 @@ export async function createVideo(
 
   // Shotstackでレンダリング開始
   try {
-    const { backgrounds: bgTemplates, window: windowTemplate, wheel: wheelTemplate } = validation.templates!;
+    const { backgrounds: bgTemplates, window: windowTemplate, wheel: wheelTemplate, music: musicTemplate } = validation.templates!;
 
     // 背景6個の動画URLを解決
     const backgroundUrls = await Promise.all(
       bgTemplates.map((bg) => getTemplateVideoUrl(bg))
     );
 
-    // 窓・車輪の動画URLを解決
-    const [windowUrl, wheelUrl] = await Promise.all([
+    // 窓・車輪・音楽の動画URLを解決
+    const [windowUrl, wheelUrl, musicUrl] = await Promise.all([
       getTemplateVideoUrl(windowTemplate),
       getTemplateVideoUrl(wheelTemplate),
+      getMusicUrl(musicTemplate),
     ]);
 
-    // 新形式でShotstackに送信
+    // 新形式でShotstackに送信（音楽付き）
     const videoInput: VideoInput = {
       backgrounds: backgroundUrls,
       window: windowUrl,
       wheel: wheelUrl,
+      music: musicUrl,
     };
 
     const environment: ShotstackEnvironment = "stage"; // 無料動画はsandbox
@@ -278,20 +283,44 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
       return { success: false, error: "テンプレート情報が不足しています" };
     }
 
-    const validation = await validateVideoTemplates({
-      backgrounds: [
-        currentVideo.background1TemplateId,
-        currentVideo.background2TemplateId,
-        currentVideo.background3TemplateId,
-        currentVideo.background4TemplateId,
-        currentVideo.background5TemplateId,
-        currentVideo.background6TemplateId,
-      ],
-      windowTemplateId: currentVideo.windowTemplateId,
-      wheelTemplateId: currentVideo.wheelTemplateId,
-    });
+    // 音楽テンプレートがない動画（既存動画）の場合はバリデーションをスキップ
+    const hasMusicTemplate = currentVideo.musicTemplateId !== null;
 
-    if (!validation.valid) {
+    // 音楽あり/なしで異なるバリデーション
+    let validation;
+    if (hasMusicTemplate) {
+      validation = await validateVideoTemplates({
+        backgrounds: [
+          currentVideo.background1TemplateId,
+          currentVideo.background2TemplateId,
+          currentVideo.background3TemplateId,
+          currentVideo.background4TemplateId,
+          currentVideo.background5TemplateId,
+          currentVideo.background6TemplateId,
+        ],
+        windowTemplateId: currentVideo.windowTemplateId,
+        wheelTemplateId: currentVideo.wheelTemplateId,
+        musicTemplateId: currentVideo.musicTemplateId!, // nullでないことは上で確認済み
+      });
+    } else {
+      // 既存動画（音楽なし）の後方互換性対応
+      // musicTemplateId=0 でバリデーションを通す（実際には使用しない）
+      validation = await validateVideoTemplates({
+        backgrounds: [
+          currentVideo.background1TemplateId,
+          currentVideo.background2TemplateId,
+          currentVideo.background3TemplateId,
+          currentVideo.background4TemplateId,
+          currentVideo.background5TemplateId,
+          currentVideo.background6TemplateId,
+        ],
+        windowTemplateId: currentVideo.windowTemplateId,
+        wheelTemplateId: currentVideo.wheelTemplateId,
+        musicTemplateId: 0, // ダミー値（後で無視される）
+      });
+    }
+
+    if (!validation.valid && hasMusicTemplate) {
       return { success: false, error: validation.error || "テンプレートの検証に失敗しました" };
     }
 
@@ -301,23 +330,99 @@ export async function retryVideo(videoId: number): Promise<RetryVideoResult> {
       const resolution: ShotstackResolution =
         currentVideo.videoType === "paid" ? "1080" : "sd";
 
-      const { backgrounds: bgTemplates, window: windowTemplate, wheel: wheelTemplate } = validation.templates!;
+      // 音楽がない場合、templatesはvalidation失敗時にundefinedになる可能性があるため
+      // テンプレートを個別に取得する
+      let bgTemplates, windowTemplate, wheelTemplate, musicTemplate;
+
+      if (validation.templates) {
+        bgTemplates = validation.templates.backgrounds;
+        windowTemplate = validation.templates.window;
+        wheelTemplate = validation.templates.wheel;
+        musicTemplate = hasMusicTemplate ? validation.templates.music : null;
+      } else {
+        // validation失敗時（音楽なしの既存動画）はテンプレートを個別に取得
+        const templateMap = await getTemplatesByIds([
+          currentVideo.background1TemplateId,
+          currentVideo.background2TemplateId,
+          currentVideo.background3TemplateId,
+          currentVideo.background4TemplateId,
+          currentVideo.background5TemplateId,
+          currentVideo.background6TemplateId,
+          currentVideo.windowTemplateId,
+          currentVideo.wheelTemplateId,
+        ]);
+
+        // 背景テンプレートの存在・カテゴリ・有効性チェック
+        const bgIds = [
+          currentVideo.background1TemplateId,
+          currentVideo.background2TemplateId,
+          currentVideo.background3TemplateId,
+          currentVideo.background4TemplateId,
+          currentVideo.background5TemplateId,
+          currentVideo.background6TemplateId,
+        ];
+        bgTemplates = [];
+        for (let i = 0; i < 6; i++) {
+          const bg = templateMap.get(bgIds[i]);
+          if (!bg) {
+            return { success: false, error: `背景${i + 1}のテンプレートが見つかりません` };
+          }
+          if (bg.category !== TEMPLATE_CATEGORY.BACKGROUND) {
+            return { success: false, error: `背景${i + 1}のカテゴリが不正です` };
+          }
+          if (bg.isActive !== 1) {
+            return { success: false, error: `背景${i + 1}は現在利用できません` };
+          }
+          bgTemplates.push(bg);
+        }
+
+        // 窓テンプレートの存在・カテゴリ・有効性チェック
+        const win = templateMap.get(currentVideo.windowTemplateId);
+        if (!win) {
+          return { success: false, error: "窓テンプレートが見つかりません" };
+        }
+        if (win.category !== TEMPLATE_CATEGORY.WINDOW) {
+          return { success: false, error: "窓テンプレートのカテゴリが不正です" };
+        }
+        if (win.isActive !== 1) {
+          return { success: false, error: "窓テンプレートは現在利用できません" };
+        }
+        windowTemplate = win;
+
+        // 車輪テンプレートの存在・カテゴリ・有効性チェック
+        const wheel = templateMap.get(currentVideo.wheelTemplateId);
+        if (!wheel) {
+          return { success: false, error: "車輪テンプレートが見つかりません" };
+        }
+        if (wheel.category !== TEMPLATE_CATEGORY.WHEEL) {
+          return { success: false, error: "車輪テンプレートのカテゴリが不正です" };
+        }
+        if (wheel.isActive !== 1) {
+          return { success: false, error: "車輪テンプレートは現在利用できません" };
+        }
+        wheelTemplate = wheel;
+        musicTemplate = null;
+      }
 
       // 背景6個の動画URLを解決
       const backgroundUrls = await Promise.all(
         bgTemplates.map((bg) => getTemplateVideoUrl(bg))
       );
 
-      // 窓・車輪の動画URLを解決
+      // 窓・車輪（・音楽）の動画URLを解決
       const [windowUrl, wheelUrl] = await Promise.all([
         getTemplateVideoUrl(windowTemplate),
         getTemplateVideoUrl(wheelTemplate),
       ]);
 
+      // 音楽URLを解決（音楽がある場合のみ）
+      const musicUrl = musicTemplate ? await getMusicUrl(musicTemplate) : undefined;
+
       const videoInput: VideoInput = {
         backgrounds: backgroundUrls,
         window: windowUrl,
         wheel: wheelUrl,
+        ...(musicUrl && { music: musicUrl }),
       };
 
       const { renderId } = await mergeVideos(videoInput, environment, resolution);

@@ -1,6 +1,50 @@
 import type { Template } from "@/db/schema";
 import { generatePresignedUrl } from "./presigned";
 import { isStorageConfigured } from "./client";
+// isValidExternalUrl は getMusicUrl で使用しなくなった（storageKey 必須化）
+
+/**
+ * 音楽テンプレートの URL を解決
+ *
+ * セキュリティ強化: storageKey からの Presigned URL 生成のみ許可
+ * 外部 URL フォールバックは SSRF リスクのため無効化
+ *
+ * @param template - テンプレートオブジェクト（storageKey 必須）
+ * @returns 音楽にアクセス可能な Presigned URL
+ * @throws storageKey がない場合、または無効な場合はエラー
+ */
+export async function getMusicUrl(
+  template: Pick<Template, "videoUrl"> & { storageKey?: string | null }
+): Promise<string> {
+  // セキュリティ: storageKey 必須（外部 URL は許可しない）
+  if (!template.storageKey) {
+    throw new Error(
+      "音楽テンプレートには storageKey が必須です（セキュリティ対策）"
+    );
+  }
+
+  if (!isStorageConfigured()) {
+    throw new Error("ストレージが設定されていません");
+  }
+
+  // セキュリティ: 音楽プレフィックスのバリデーション
+  if (!template.storageKey.startsWith("music/")) {
+    console.error(
+      `[getMusicUrl] Invalid storage key prefix: ${template.storageKey}`
+    );
+    throw new Error("無効な音楽キーです（music/ プレフィックスが必要）");
+  }
+
+  try {
+    return await generatePresignedUrl(template.storageKey, 60 * 60); // 1時間有効
+  } catch (error) {
+    console.error(
+      `[getMusicUrl] Presigned URL 生成失敗: ${template.storageKey}`,
+      error
+    );
+    throw error;
+  }
+}
 
 /**
  * サムネイルの storageKey から URL を生成

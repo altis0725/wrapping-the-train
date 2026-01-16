@@ -18,7 +18,7 @@ const steps = [
     title: "SELECT TEMPLATE",
     subtitle: "動画を作成",
     description:
-      "3つのテンプレートを組み合わせて、\nあなただけのオリジナル動画を作成。",
+      "4つのテンプレートを組み合わせて、\nあなただけのオリジナル動画を作成。",
   },
   {
     icon: Calendar,

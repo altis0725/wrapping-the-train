@@ -22,6 +22,10 @@ export const createVideoSchema = z.object({
     .number()
     .int()
     .positive("車輪テンプレートIDは正の整数である必要があります"),
+  musicTemplateId: z
+    .number()
+    .int()
+    .positive("音楽テンプレートIDは正の整数である必要があります"),
 });
 
 export type CreateVideoInput = z.infer<typeof createVideoSchema>;
