@@ -85,8 +85,8 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative flex items-center justify-center py-20 sm:py-24 lg:py-28 overflow-hidden min-h-[90vh]">
         {/* Decorative Circles */}
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[100px] animate-pulse-glow" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-purple-500/10 rounded-full blur-[100px] animate-pulse-glow delay-1000" />
+        <div className="absolute top-1/4 left-1/4 w-[250px] sm:w-[350px] md:w-[400px] lg:w-[500px] h-[250px] sm:h-[350px] md:h-[400px] lg:h-[500px] bg-cyan-500/10 rounded-full blur-[100px] animate-pulse-glow" />
+        <div className="absolute bottom-1/4 right-1/4 w-[250px] sm:w-[350px] md:w-[400px] lg:w-[500px] h-[250px] sm:h-[350px] md:h-[400px] lg:h-[500px] bg-purple-500/10 rounded-full blur-[100px] animate-pulse-glow delay-1000" />
 
         <motion.div
           className="mx-auto max-w-7xl px-6 lg:px-8 text-center relative z-10"
@@ -95,14 +95,14 @@ export default function Home() {
           variants={containerVariants}
         >
           <motion.div variants={itemVariants} className="mb-8 inline-block">
-            <span className="px-6 py-2 rounded-full border border-cyan-500/30 bg-cyan-950/30 text-cyan-300 text-sm md:text-base tracking-[0.2em] font-orbitron uppercase backdrop-blur-sm shadow-[0_0_20px_rgba(6,182,212,0.2)]">
+            <span className="px-3 sm:px-4 md:px-6 py-2 rounded-full border border-cyan-500/30 bg-cyan-950/30 text-cyan-300 text-xs sm:text-sm md:text-base tracking-[0.1em] sm:tracking-[0.15em] md:tracking-[0.2em] font-orbitron uppercase backdrop-blur-sm shadow-[0_0_20px_rgba(6,182,212,0.2)]">
               Next Gen Projection Mapping
             </span>
           </motion.div>
 
           <motion.h1
             variants={itemVariants}
-            className="text-5xl md:text-7xl lg:text-8xl xl:text-9xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-b from-white via-cyan-50 to-slate-400 text-glow font-orbitron leading-none"
+            className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl xl:text-9xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-b from-white via-cyan-50 to-slate-400 text-glow font-orbitron leading-tight"
           >
             <div className="flex flex-col items-center gap-2">
               <span className="tracking-tighter">WRAPPING</span>
@@ -112,13 +112,13 @@ export default function Home() {
 
           <motion.p
             variants={itemVariants}
-            className="text-lg md:text-2xl text-slate-300 mb-12 max-w-2xl mx-auto tracking-wide leading-relaxed font-light font-sans"
+            className="text-base sm:text-lg md:text-2xl text-slate-300 mb-12 max-w-2xl mx-auto tracking-normal sm:tracking-wide leading-relaxed font-light font-sans"
           >
             夜の水間鉄道を、あなたのキャンバスに。<br className="hidden md:block" />
             世界に一つだけのデジタルアートトレインを創ろう。
           </motion.p>
 
-          <motion.div variants={itemVariants} className="flex flex-col sm:flex-row items-center justify-center gap-6">
+          <motion.div variants={itemVariants} className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6">
             <Button size="lg" className="w-full sm:w-auto h-14 px-8 text-lg font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-none skew-x-[-10deg] shadow-[0_0_20px_rgba(6,182,212,0.4)] neon-button group" asChild>
               <Link href="/create">
                 <span className="skew-x-[10deg] flex items-center gap-3">
@@ -183,7 +183,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <h3 className="text-2xl font-bold mb-2 tracking-wider font-orbitron text-white">{step.title}</h3>
+                <h3 className="text-xl sm:text-2xl font-bold mb-2 tracking-wider font-orbitron text-white">{step.title}</h3>
                 <h4 className="text-cyan-400 text-sm font-bold mb-4 tracking-widest">{step.subtitle}</h4>
                 <p className="text-slate-400 leading-relaxed whitespace-pre-line">
                   {step.description}
@@ -316,12 +316,12 @@ export default function Home() {
               あなたの動画が水間鉄道の車両に投影される、<br />
               忘れられない瞬間を体験してください。
             </p>
-            <Button size="lg" className="h-20 px-16 text-2xl font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-none skew-x-[-10deg] shadow-[0_0_30px_rgba(6,182,212,0.4)] neon-button hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] group" asChild>
+            <Button size="lg" className="h-14 sm:h-16 md:h-20 px-8 sm:px-12 md:px-16 text-lg sm:text-xl md:text-2xl font-bold bg-cyan-600 hover:bg-cyan-500 text-white rounded-none skew-x-[-10deg] shadow-[0_0_30px_rgba(6,182,212,0.4)] neon-button hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] group" asChild>
               <Link href="/create">
-                <span className="skew-x-[10deg] flex items-center gap-3">
-                  <Train className="mr-2 h-7 w-7" />
+                <span className="skew-x-[10deg] flex items-center gap-2 sm:gap-3">
+                  <Train className="mr-1 sm:mr-2 h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7" />
                   START NOW
-                  <ArrowRight className="h-6 w-6 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 group-hover:translate-x-1 transition-transform" />
                 </span>
               </Link>
             </Button>
