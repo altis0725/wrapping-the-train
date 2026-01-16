@@ -8,6 +8,7 @@ import { StepIndicator } from "./step-indicator";
 import { TemplateGrid } from "./template-grid";
 import { BackgroundGrid } from "./background-grid";
 import { VideoPreview } from "./video-preview";
+import { MusicGrid } from "./music-grid";
 import { useVideoStatus } from "./use-video-status";
 import { createVideo, retryVideo } from "@/actions/video";
 import { VIDEO_STATUS } from "@/db/schema";
@@ -21,6 +22,7 @@ const STEPS = [
   { label: "背景", description: "6つの背景映像を選択" },
   { label: "窓", description: "窓の映像を1つ選択" },
   { label: "車輪", description: "車輪の映像を1つ選択" },
+  { label: "音楽", description: "BGMを1つ選択" },
 ];
 
 interface CreateVideoFormProps {
@@ -28,16 +30,18 @@ interface CreateVideoFormProps {
     background: TemplateWithResolvedThumbnail[];
     window: TemplateWithResolvedThumbnail[];
     wheel: TemplateWithResolvedThumbnail[];
+    music: TemplateWithResolvedThumbnail[];
   };
 }
 
-type Step = 0 | 1 | 2;
+type Step = 0 | 1 | 2 | 3;
 
 // 新仕様の選択状態
 interface VideoSelection {
   backgrounds: (TemplateWithResolvedThumbnail | null)[];  // 6個の配列
   window: TemplateWithResolvedThumbnail | null;
   wheel: TemplateWithResolvedThumbnail | null;
+  music: TemplateWithResolvedThumbnail | null;  // 音楽（必須）
 }
 
 export function CreateVideoForm({ templates }: CreateVideoFormProps) {
@@ -49,6 +53,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
     backgrounds: Array(BACKGROUND_COUNT).fill(null),
     window: null,
     wheel: null,
+    music: null,
   });
 
   // 現在のステップ（0: 背景, 1: 窓, 2: 車輪）
@@ -73,6 +78,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
     if (allBackgroundsSelected) completed.push(0);
     if (selection.window) completed.push(1);
     if (selection.wheel) completed.push(2);
+    if (selection.music) completed.push(3);
     return completed;
   };
 
@@ -85,6 +91,8 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
         return selection.window !== null;
       case 2:
         return selection.wheel !== null;
+      case 3:
+        return selection.music !== null;
       default:
         return false;
     }
@@ -137,9 +145,17 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
     []
   );
 
+  // 音楽テンプレートを選択
+  const handleMusicSelect = useCallback(
+    (template: TemplateWithResolvedThumbnail) => {
+      setSelection((prev) => ({ ...prev, music: template }));
+    },
+    []
+  );
+
   // 次へボタンのハンドラ
   const handleNext = () => {
-    if (currentStep < 2) {
+    if (currentStep < 3) {
       setCurrentStep((prev) => (prev + 1) as Step);
     }
   };
@@ -155,7 +171,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
   const handleCreateVideo = async () => {
     // 全選択が完了しているか確認
     const allBackgroundsSelected = selection.backgrounds.every((bg) => bg !== null);
-    if (!allBackgroundsSelected || !selection.window || !selection.wheel) {
+    if (!allBackgroundsSelected || !selection.window || !selection.wheel || !selection.music) {
       setCreateError("すべてのテンプレートを選択してください");
       return;
     }
@@ -167,6 +183,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
         backgrounds: selection.backgrounds.map((bg) => bg!.id),
         windowTemplateId: selection.window!.id,
         wheelTemplateId: selection.wheel!.id,
+        musicTemplateId: selection.music!.id,
       });
 
       if (result.success) {
@@ -357,6 +374,25 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
             />
           </div>
         )}
+
+        {/* Step 3: 音楽選択 */}
+        {currentStep === 3 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium" data-testid="category">
+                BGMを選択
+              </h3>
+              <span className="text-sm text-muted-foreground">
+                動画全体で使用
+              </span>
+            </div>
+            <MusicGrid
+              templates={templates.music}
+              selectedId={selection.music?.id ?? null}
+              onSelect={handleMusicSelect}
+            />
+          </div>
+        )}
       </div>
 
       {/* エラー表示 */}
@@ -377,7 +413,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
           戻る
         </Button>
 
-        {currentStep < 2 ? (
+        {currentStep < 3 ? (
           <Button onClick={handleNext} disabled={!canProceed()}>
             次へ
             <ChevronRight className="h-4 w-4 ml-2" />
@@ -399,7 +435,7 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
       {/* 選択サマリー */}
       <div className="border-t pt-6">
         <h3 className="font-medium mb-4">選択内容</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
           <div>
             <span className="text-muted-foreground">背景:</span>
             <span className="ml-2">
@@ -416,6 +452,12 @@ export function CreateVideoForm({ templates }: CreateVideoFormProps) {
             <span className="text-muted-foreground">車輪:</span>
             <span className="ml-2">
               {selection.wheel ? selection.wheel.title : "未選択"}
+            </span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">音楽:</span>
+            <span className="ml-2">
+              {selection.music ? selection.music.title : "未選択"}
             </span>
           </div>
           <div>

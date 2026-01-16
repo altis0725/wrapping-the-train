@@ -40,7 +40,7 @@ export default async function CreatePage() {
                 CREATE VIDEO
               </h1>
               <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-                3つのテンプレートを選んで、あなただけの動画を作りましょう。<br />
+                4つのテンプレートを選んで、あなただけの動画を作りましょう。<br />
                 プレビューを見ながら直感的に操作できます。
               </p>
             </div>

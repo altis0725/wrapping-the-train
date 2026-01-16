@@ -3,7 +3,7 @@
 import { db } from "@/db";
 import { templates, TEMPLATE_CATEGORY, type Template } from "@/db/schema";
 import { eq, and, asc, inArray } from "drizzle-orm";
-import { getThumbnailUrl } from "@/lib/storage/resolver";
+import { getThumbnailUrl, getMusicUrl } from "@/lib/storage/resolver";
 import { isValidExternalUrl } from "@/lib/validations/url";
 
 export type TemplateWithCategory = Template & {
@@ -67,11 +67,29 @@ function isAllowedRelativePath(url: string): boolean {
  * storageKey形式の場合はPresigned URLを生成
  * 相対パスの場合はそのまま使用（内部アセット）
  * 外部URLの場合はhttps かつ安全なホストのみ許可
+ *
+ * 音楽カテゴリの場合は resolvedThumbnailUrl に音楽ファイルの URL を格納
+ * （プレビュー再生用）
  */
 async function resolveTemplateThumbnail(
   template: Template
 ): Promise<TemplateWithResolvedThumbnail> {
   let resolvedThumbnailUrl: string | undefined;
+
+  // 音楽カテゴリの場合は videoUrl を解決（プレビュー再生用）
+  if (template.category === TEMPLATE_CATEGORY.MUSIC) {
+    try {
+      resolvedThumbnailUrl = await getMusicUrl(template);
+    } catch (error) {
+      console.warn(
+        `[resolveTemplateThumbnail] Failed to resolve music URL for template ${template.id}:`,
+        error instanceof Error ? error.message : error
+      );
+    }
+    return { ...template, resolvedThumbnailUrl };
+  }
+
+  // 通常のカテゴリはサムネイル画像を解決
   const thumbnailUrl = template.thumbnailUrl;
 
   if (!thumbnailUrl) {
@@ -107,7 +125,7 @@ async function resolveTemplateThumbnail(
  * カテゴリ別にテンプレートを取得
  */
 export async function getTemplatesByCategory(
-  category: 1 | 2 | 3
+  category: 1 | 2 | 3 | 4
 ): Promise<Template[]> {
   const result = await db
     .select()
@@ -125,14 +143,16 @@ export async function getAllTemplates(): Promise<{
   background: Template[];
   window: Template[];
   wheel: Template[];
+  music: Template[];
 }> {
-  const [background, window, wheel] = await Promise.all([
+  const [background, window, wheel, music] = await Promise.all([
     getTemplatesByCategory(TEMPLATE_CATEGORY.BACKGROUND as 1),
     getTemplatesByCategory(TEMPLATE_CATEGORY.WINDOW as 2),
     getTemplatesByCategory(TEMPLATE_CATEGORY.WHEEL as 3),
+    getTemplatesByCategory(TEMPLATE_CATEGORY.MUSIC as 4),
   ]);
 
-  return { background, window, wheel };
+  return { background, window, wheel, music };
 }
 
 /**
@@ -143,24 +163,28 @@ export async function getAllTemplatesWithThumbnails(): Promise<{
   background: TemplateWithResolvedThumbnail[];
   window: TemplateWithResolvedThumbnail[];
   wheel: TemplateWithResolvedThumbnail[];
+  music: TemplateWithResolvedThumbnail[];
 }> {
-  const [background, window, wheel] = await Promise.all([
+  const [background, window, wheel, music] = await Promise.all([
     getTemplatesByCategory(TEMPLATE_CATEGORY.BACKGROUND as 1),
     getTemplatesByCategory(TEMPLATE_CATEGORY.WINDOW as 2),
     getTemplatesByCategory(TEMPLATE_CATEGORY.WHEEL as 3),
+    getTemplatesByCategory(TEMPLATE_CATEGORY.MUSIC as 4),
   ]);
 
   // 全テンプレートのサムネイルを並列で解決
-  const [resolvedBackground, resolvedWindow, resolvedWheel] = await Promise.all([
+  const [resolvedBackground, resolvedWindow, resolvedWheel, resolvedMusic] = await Promise.all([
     Promise.all(background.map(resolveTemplateThumbnail)),
     Promise.all(window.map(resolveTemplateThumbnail)),
     Promise.all(wheel.map(resolveTemplateThumbnail)),
+    Promise.all(music.map(resolveTemplateThumbnail)),
   ]);
 
   return {
     background: resolvedBackground,
     window: resolvedWindow,
     wheel: resolvedWheel,
+    music: resolvedMusic,
   };
 }
 
@@ -340,6 +364,7 @@ export type VideoTemplateIds = {
   backgrounds: number[];  // 6個の背景テンプレートID
   windowTemplateId: number;
   wheelTemplateId: number;
+  musicTemplateId: number;  // 音楽テンプレートID（必須）
 };
 
 /**
@@ -352,17 +377,18 @@ export type VideoTemplateValidationResult = {
     backgrounds: Template[];  // 6個の背景テンプレート
     window: Template;
     wheel: Template;
+    music: Template;  // 音楽テンプレート
   };
 };
 
 /**
  * 60秒動画のテンプレート検証
- * 背景6個 + 窓1個 + 車輪1個 を一括で検証
+ * 背景6個 + 窓1個 + 車輪1個 + 音楽1個 を一括で検証
  */
 export async function validateVideoTemplates(
   input: VideoTemplateIds
 ): Promise<VideoTemplateValidationResult> {
-  const { backgrounds, windowTemplateId, wheelTemplateId } = input;
+  const { backgrounds, windowTemplateId, wheelTemplateId, musicTemplateId } = input;
 
   // 背景が6個あることを確認
   if (backgrounds.length !== 6) {
@@ -370,7 +396,7 @@ export async function validateVideoTemplates(
   }
 
   // 全IDを収集（重複除去）
-  const allIds = [...new Set([...backgrounds, windowTemplateId, wheelTemplateId])];
+  const allIds = [...new Set([...backgrounds, windowTemplateId, wheelTemplateId, musicTemplateId])];
 
   // 一括でテンプレートを取得（1クエリのみ）
   const templateMap = await getTemplatesByIds(allIds);
@@ -417,12 +443,25 @@ export async function validateVideoTemplates(
     return { valid: false, error: "車輪テンプレートは現在利用できません" };
   }
 
+  // 音楽テンプレートの検証
+  const musicTemplate = templateMap.get(musicTemplateId);
+  if (!musicTemplate) {
+    return { valid: false, error: "音楽テンプレートが見つかりません" };
+  }
+  if (musicTemplate.category !== TEMPLATE_CATEGORY.MUSIC) {
+    return { valid: false, error: "音楽テンプレートのカテゴリが不正です" };
+  }
+  if (musicTemplate.isActive !== 1) {
+    return { valid: false, error: "音楽テンプレートは現在利用できません" };
+  }
+
   return {
     valid: true,
     templates: {
       backgrounds: backgroundTemplates,
       window: windowTemplate,
       wheel: wheelTemplate,
+      music: musicTemplate,
     },
   };
 }
