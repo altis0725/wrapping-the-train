@@ -66,6 +66,7 @@ export const videos = pgTable(
     background6TemplateId: integer("background6_template_id").references(() => templates.id),
     windowTemplateId: integer("window_template_id").references(() => templates.id),
     wheelTemplateId: integer("wheel_template_id").references(() => templates.id),
+    musicTemplateId: integer("music_template_id").references(() => templates.id),
     // === 旧仕様: 30秒動画（後方互換性のため残す） ===
     // セグメント1（0-10秒）
     template1Id: integer("template1_id").references(() => templates.id),
@@ -135,6 +136,10 @@ export const videosRelations = relations(videos, ({ one, many }) => ({
   }),
   wheelTemplate: one(templates, {
     fields: [videos.wheelTemplateId],
+    references: [templates.id],
+  }),
+  musicTemplate: one(templates, {
+    fields: [videos.musicTemplateId],
     references: [templates.id],
   }),
   // === 旧仕様: 30秒動画（後方互換性） ===
@@ -408,6 +413,7 @@ export const TEMPLATE_CATEGORY = {
   BACKGROUND: 1, // 背景
   WINDOW: 2, // 窓
   WHEEL: 3, // 車輪
+  MUSIC: 4, // 音楽
 } as const;
 
 export const USER_ROLE = {
