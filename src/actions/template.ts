@@ -454,6 +454,11 @@ export async function validateVideoTemplates(
   if (musicTemplate.isActive !== 1) {
     return { valid: false, error: "音楽テンプレートは現在利用できません" };
   }
+  // セキュリティ: 音楽テンプレートには storageKey が必須
+  // getMusicUrl が storageKey を要求するため、事前にチェックして失敗動画の量産を防ぐ
+  if (!musicTemplate.storageKey || !musicTemplate.storageKey.startsWith("music/")) {
+    return { valid: false, error: "音楽ファイルが正しく設定されていません" };
+  }
 
   return {
     valid: true,
