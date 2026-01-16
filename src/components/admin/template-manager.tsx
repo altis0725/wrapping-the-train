@@ -37,7 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff, Upload, Link, Copy } from "lucide-react";
+import { Plus, MoreVertical, Pencil, Trash2, Eye, EyeOff, Upload, Link, Copy, Music } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Template } from "@/db/schema";
 import { VideoUploader } from "./video-uploader";
@@ -66,6 +66,7 @@ const categoryLabels: Record<number, string> = {
   [TEMPLATE_CATEGORY.BACKGROUND]: "背景",
   [TEMPLATE_CATEGORY.WINDOW]: "窓",
   [TEMPLATE_CATEGORY.WHEEL]: "車輪",
+  [TEMPLATE_CATEGORY.MUSIC]: "音楽",
 };
 
 export function TemplateManager({ templates }: TemplateManagerProps) {
@@ -241,6 +242,7 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
       TEMPLATE_CATEGORY.BACKGROUND,
       TEMPLATE_CATEGORY.WINDOW,
       TEMPLATE_CATEGORY.WHEEL,
+      TEMPLATE_CATEGORY.MUSIC,
     ].filter((cat) => cat !== currentCategory);
   };
 
@@ -342,8 +344,24 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
   };
 
   // formData のカテゴリトグル（新規作成用）
+  // 音楽カテゴリは単独選択のみ（動画と音楽の混合を防止）
   const toggleFormCategory = (category: number) => {
+    // 音楽カテゴリを選択した場合は単独選択
+    if (category === TEMPLATE_CATEGORY.MUSIC) {
+      // 既に音楽が選択されている場合は解除しない（最低1つ必要）
+      if (formData.categories.has(TEMPLATE_CATEGORY.MUSIC) && formData.categories.size === 1) {
+        return;
+      }
+      setFormData({ ...formData, categories: new Set([TEMPLATE_CATEGORY.MUSIC]) });
+      return;
+    }
+
+    // 音楽以外を選択した場合
     const newCategories = new Set(formData.categories);
+
+    // 音楽カテゴリが含まれていたら除外
+    newCategories.delete(TEMPLATE_CATEGORY.MUSIC);
+
     if (newCategories.has(category)) {
       // 最低1つは必要
       if (newCategories.size > 1) {
@@ -360,6 +378,7 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
     TEMPLATE_CATEGORY.BACKGROUND,
     TEMPLATE_CATEGORY.WINDOW,
     TEMPLATE_CATEGORY.WHEEL,
+    TEMPLATE_CATEGORY.MUSIC,
   ].map((category) => ({
     category,
     label: categoryLabels[category],
@@ -450,7 +469,12 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                       <TableCell>{template.displayOrder}</TableCell>
                       <TableCell className="font-medium">{template.title}</TableCell>
                       <TableCell>
-                        {template.resolvedThumbnailUrl ? (
+                        {template.category === TEMPLATE_CATEGORY.MUSIC ? (
+                          // 音楽カテゴリはアイコン表示（音声URLを画像として表示しない）
+                          <div className="w-16 h-10 rounded bg-primary/10 flex items-center justify-center">
+                            <Music className="h-6 w-6 text-primary" />
+                          </div>
+                        ) : template.resolvedThumbnailUrl ? (
                           <Image
                             src={template.resolvedThumbnailUrl}
                             alt={template.title}
@@ -550,11 +574,14 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                     <SelectItem value={String(TEMPLATE_CATEGORY.WHEEL)}>
                       車輪
                     </SelectItem>
+                    <SelectItem value={String(TEMPLATE_CATEGORY.MUSIC)}>
+                      音楽
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {[TEMPLATE_CATEGORY.BACKGROUND, TEMPLATE_CATEGORY.WINDOW, TEMPLATE_CATEGORY.WHEEL].map((cat) => (
+                <div className="grid grid-cols-4 gap-2">
+                  {[TEMPLATE_CATEGORY.BACKGROUND, TEMPLATE_CATEGORY.WINDOW, TEMPLATE_CATEGORY.WHEEL, TEMPLATE_CATEGORY.MUSIC].map((cat) => (
                     <Button
                       key={cat}
                       type="button"
@@ -628,6 +655,7 @@ export function TemplateManager({ templates }: TemplateManagerProps) {
                       }
                       onError={(err) => setError(err)}
                       disabled={isSubmitting}
+                      isMusic={Array.from(formData.categories)[0] === TEMPLATE_CATEGORY.MUSIC}
                     />
                   )}
                 </TabsContent>

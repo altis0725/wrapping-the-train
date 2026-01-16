@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { Upload, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Upload, X, Loader2, CheckCircle2, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,8 @@ interface VideoUploaderProps {
   onUpload: (storageKey: string, thumbnailStorageKey?: string) => void;
   onError?: (error: string) => void;
   disabled?: boolean;
+  /** 音楽モード（音楽ファイルのアップロードを許可） */
+  isMusic?: boolean;
 }
 
 type UploadState = "idle" | "uploading" | "success" | "error";
@@ -22,6 +24,7 @@ export function VideoUploader({
   onUpload,
   onError,
   disabled = false,
+  isMusic = false,
 }: VideoUploaderProps) {
   const [state, setState] = useState<UploadState>("idle");
   const [progress, setProgress] = useState(0);
@@ -40,20 +43,27 @@ export function VideoUploader({
     }
   }, []);
 
-  const validateFile = useCallback((file: File): string | null => {
-    const allowedTypes = ["video/mp4", "video/quicktime"];
-    const maxSize = 500 * 1024 * 1024; // 500MB
+  const validateFile = useCallback(
+    (file: File): string | null => {
+      const videoTypes = ["video/mp4", "video/quicktime"];
+      const musicTypes = ["audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a"];
+      const allowedTypes = isMusic ? musicTypes : videoTypes;
+      const maxSize = 500 * 1024 * 1024; // 500MB
 
-    if (!allowedTypes.includes(file.type)) {
-      return "MP4 または MOV ファイルのみアップロード可能です";
-    }
+      if (!allowedTypes.includes(file.type)) {
+        return isMusic
+          ? "MP3, WAV, M4A ファイルのみアップロード可能です"
+          : "MP4 または MOV ファイルのみアップロード可能です";
+      }
 
-    if (file.size > maxSize) {
-      return "ファイルサイズは 500MB 以下にしてください";
-    }
+      if (file.size > maxSize) {
+        return "ファイルサイズは 500MB 以下にしてください";
+      }
 
-    return null;
-  }, []);
+      return null;
+    },
+    [isMusic]
+  );
 
   const uploadFile = useCallback(async (file: File) => {
     const validationError = validateFile(file);
@@ -164,7 +174,7 @@ export function VideoUploader({
       <div
         role="button"
         tabIndex={disabled || state === "uploading" ? -1 : 0}
-        aria-label="動画ファイルをアップロード"
+        aria-label={isMusic ? "音楽ファイルをアップロード" : "動画ファイルをアップロード"}
         aria-disabled={disabled || state === "uploading"}
         aria-busy={state === "uploading"}
         className={cn(
@@ -187,23 +197,31 @@ export function VideoUploader({
         <input
           ref={inputRef}
           type="file"
-          accept="video/mp4,video/quicktime,.mp4,.mov"
+          accept={
+            isMusic
+              ? "audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a"
+              : "video/mp4,video/quicktime,.mp4,.mov"
+          }
           onChange={handleChange}
           className="sr-only"
-          aria-label="動画ファイルを選択"
+          aria-label={isMusic ? "音楽ファイルを選択" : "動画ファイルを選択"}
           disabled={disabled || state === "uploading"}
         />
 
         <div className="flex flex-col items-center gap-3 text-center">
           {state === "idle" && (
             <>
-              <Upload className="h-10 w-10 text-muted-foreground" />
+              {isMusic ? (
+                <Music className="h-10 w-10 text-muted-foreground" />
+              ) : (
+                <Upload className="h-10 w-10 text-muted-foreground" />
+              )}
               <div>
                 <p className="text-sm font-medium">
                   ドラッグ&ドロップ または クリックしてファイルを選択
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  MP4, MOV (最大 500MB)
+                  {isMusic ? "MP3, WAV, M4A (最大 500MB)" : "MP4, MOV (最大 500MB)"}
                 </p>
               </div>
             </>
