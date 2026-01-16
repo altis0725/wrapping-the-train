@@ -13,11 +13,7 @@ export const createVideoSchema = z.object({
     .array(
       z.number().int().positive("背景テンプレートIDは正の整数である必要があります")
     )
-    .length(6, "6つの背景を選択してください")
-    .refine(
-      (ids) => new Set(ids).size === ids.length,
-      "背景テンプレートは重複できません"
-    ),
+    .length(6, "6つの背景を選択してください"),
   windowTemplateId: z
     .number()
     .int()

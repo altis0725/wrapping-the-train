@@ -76,10 +76,6 @@ export function BackgroundGrid({
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {templates.map((template) => {
-              // このテンプレートが既に選択されているかチェック
-              const isSelectedInOtherSlot = selectedBackgrounds.some(
-                (bg, idx) => bg?.id === template.id && idx !== activeSlot
-              );
               const isSelectedInCurrentSlot = selectedBackgrounds[activeSlot]?.id === template.id;
 
               return (
@@ -87,7 +83,6 @@ export function BackgroundGrid({
                   key={template.id}
                   template={template}
                   isSelected={isSelectedInCurrentSlot}
-                  isDisabled={isSelectedInOtherSlot}
                   onSelect={onTemplateSelect}
                 />
               );
@@ -178,34 +173,29 @@ function BackgroundSlot({ index, selected, isActive, onClick }: BackgroundSlotPr
 interface TemplateOptionProps {
   template: TemplateWithResolvedThumbnail;
   isSelected: boolean;
-  isDisabled: boolean;
   onSelect: (template: TemplateWithResolvedThumbnail) => void;
 }
 
-function TemplateOption({ template, isSelected, isDisabled, onSelect }: TemplateOptionProps) {
+function TemplateOption({ template, isSelected, onSelect }: TemplateOptionProps) {
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (!isDisabled) {
-        onSelect(template);
-      }
+      onSelect(template);
     }
   };
 
   return (
     <Card
       role="button"
-      tabIndex={isDisabled ? -1 : 0}
+      tabIndex={0}
       aria-pressed={isSelected}
-      aria-disabled={isDisabled}
-      aria-label={`${template.title}${isSelected ? "（選択中）" : ""}${isDisabled ? "（他のスロットで使用中）" : ""}`}
+      aria-label={`${template.title}${isSelected ? "（選択中）" : ""}`}
       className={cn(
         "cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-primary",
         isSelected && "ring-2 ring-primary",
-        isDisabled && "opacity-50 cursor-not-allowed",
-        !isDisabled && !isSelected && "hover:ring-2 hover:ring-primary/50"
+        !isSelected && "hover:ring-2 hover:ring-primary/50"
       )}
-      onClick={() => !isDisabled && onSelect(template)}
+      onClick={() => onSelect(template)}
       onKeyDown={handleKeyDown}
     >
       <CardContent className="p-0 relative">
@@ -225,11 +215,6 @@ function TemplateOption({ template, isSelected, isDisabled, onSelect }: Template
           {isSelected && (
             <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
               <Check className="h-4 w-4" />
-            </div>
-          )}
-          {isDisabled && (
-            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-              <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">使用中</span>
             </div>
           )}
         </div>
