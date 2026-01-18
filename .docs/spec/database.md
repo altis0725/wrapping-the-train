@@ -19,7 +19,7 @@
 | カラム | 型 | 説明 |
 |--------|-----|------|
 | id | SERIAL | PK |
-| category | INTEGER | 1:背景/2:窓/3:車輪 |
+| category | INTEGER | 1:背景/2:窓/3:車輪/4:音楽 |
 | title | VARCHAR(255) | タイトル |
 | video_url | VARCHAR(512) | 動画URL (nullable, storage_key優先) |
 | storage_key | VARCHAR(512) | Railway Storage Bucket内のオブジェクトキー (nullable) |
@@ -27,19 +27,35 @@
 | display_order | INTEGER | 表示順 |
 | is_active | INTEGER | 有効フラグ |
 
+**カテゴリ定義**:
+| ID | 名称 | 説明 |
+|----|------|------|
+| 1 | 背景 | ベース映像（10秒 × 6 = 60秒） |
+| 2 | 窓 | ルママスクで合成 |
+| 3 | 車輪 | ルママスクで合成 |
+| 4 | 音楽 | BGM |
+
 **備考**:
 - `storage_key`が設定されている場合はRailway Storage Bucketからファイルを取得
 - `storage_key`が未設定の場合は`video_url`を参照（後方互換性）
 
 ### videos
+60秒動画（背景6個 + 窓1個 + 車輪1個 + 音楽1個）
+
 | カラム | 型 | 説明 |
 |--------|-----|------|
 | id | SERIAL | PK |
 | user_id | INTEGER | FK→users |
-| template1_id | INTEGER | 背景 |
-| template2_id | INTEGER | 窓 |
-| template3_id | INTEGER | 車輪 |
-| video_url | VARCHAR(512) | 生成動画 |
+| background1_template_id | INTEGER | 背景1 (0-10秒) |
+| background2_template_id | INTEGER | 背景2 (10-20秒) |
+| background3_template_id | INTEGER | 背景3 (20-30秒) |
+| background4_template_id | INTEGER | 背景4 (30-40秒) |
+| background5_template_id | INTEGER | 背景5 (40-50秒) |
+| background6_template_id | INTEGER | 背景6 (50-60秒) |
+| window_template_id | INTEGER | 窓テンプレート |
+| wheel_template_id | INTEGER | 車輪テンプレート |
+| music_template_id | INTEGER | 音楽テンプレート |
+| video_url | VARCHAR(512) | 生成動画URL |
 | video_type | VARCHAR(20) | free/paid |
 | status | VARCHAR(20) | 処理状態 (pending/processing/completed/failed) |
 | render_id | VARCHAR(255) | Shotstack render ID |
@@ -47,6 +63,16 @@
 | last_error | TEXT | 最終エラーメッセージ |
 | expires_at | TIMESTAMP | 有効期限 |
 | created_at | TIMESTAMP | 作成日時 |
+
+**動画構成**:
+```
+[背景1: 0-10秒] + [背景2: 10-20秒] + [背景3: 20-30秒] +
+[背景4: 30-40秒] + [背景5: 40-50秒] + [背景6: 50-60秒]
+  ↓ ルママスク合成
+[窓: 0-60秒] + [車輪: 0-60秒]
+  ↓ 音声合成
+[音楽: 0-60秒]
+```
 
 ### reservations
 | カラム | 型 | 説明 |
@@ -60,7 +86,10 @@
 | status | VARCHAR(30) | 予約状態 (hold/confirmed/expired/cancelled/completed) |
 | hold_expires_at | TIMESTAMP | 仮押さえ期限 |
 | locked_at | TIMESTAMP | 決済開始時刻 |
+| idempotency_key | VARCHAR(64) | 冪等性キー (UNIQUE) |
+| cancelled_at | TIMESTAMP | キャンセル日時 (nullable) |
 | created_at | TIMESTAMP | 作成日時 |
+| updated_at | TIMESTAMP | 最終更新日時 |
 
 **制約**:
 ```sql
@@ -77,7 +106,12 @@ WHERE status NOT IN ('expired', 'cancelled');
 | user_id | INTEGER | FK→users |
 | amount | INTEGER | 金額 |
 | stripe_payment_intent_id | VARCHAR(255) | Stripe ID |
+| stripe_checkout_session_id | VARCHAR(255) | Stripe Checkout Session ID |
 | status | VARCHAR(20) | 決済状態 |
+| refund_id | VARCHAR(255) | Stripe Refund ID (nullable) |
+| refunded_at | TIMESTAMP | 返金日時 (nullable) |
+| created_at | TIMESTAMP | 作成日時 |
+| updated_at | TIMESTAMP | 最終更新日時 |
 
 ### projection_schedules
 | カラム | 型 | 説明 |
@@ -131,42 +165,18 @@ Webhook冪等性確保用
 | metadata | JSONB | 追加情報 |
 | created_at | TIMESTAMP | 作成日時 |
 
----
-
-## 追加カラム
-
-### reservations テーブル追加カラム
+### audit_logs
+管理者操作の監査ログ
 
 | カラム | 型 | 説明 |
 |--------|-----|------|
-| idempotency_key | VARCHAR(64) | 冪等性キー (UNIQUE) |
-| cancelled_at | TIMESTAMP | キャンセル日時 (nullable) |
-| updated_at | TIMESTAMP | 最終更新日時 |
-
-```sql
-ALTER TABLE reservations
-ADD COLUMN idempotency_key VARCHAR(64) UNIQUE,
-ADD COLUMN cancelled_at TIMESTAMP,
-ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
-
-CREATE INDEX reservations_idempotency_key_idx ON reservations(idempotency_key);
-CREATE INDEX reservations_updated_at_idx ON reservations(updated_at);
-```
-
-### payments テーブル追加カラム
-
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| refund_id | VARCHAR(255) | Stripe Refund ID (nullable) |
-| refunded_at | TIMESTAMP | 返金日時 (nullable) |
-| updated_at | TIMESTAMP | 最終更新日時 |
-
-```sql
-ALTER TABLE payments
-ADD COLUMN refund_id VARCHAR(255),
-ADD COLUMN refunded_at TIMESTAMP,
-ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
-```
+| id | SERIAL | PK |
+| admin_id | INTEGER | 管理者ユーザーID |
+| action | VARCHAR(100) | 操作種別 |
+| target_type | VARCHAR(50) | 対象エンティティ種別 |
+| target_id | INTEGER | 対象エンティティID |
+| details | JSONB | 操作詳細 |
+| created_at | TIMESTAMP | 作成日時 |
 
 ---
 
@@ -196,4 +206,8 @@ WHERE expires_at IS NOT NULL;
 -- 補償処理検索用
 CREATE INDEX compensation_logs_reservation_idx
 ON compensation_logs(reservation_id);
+
+-- 冪等性キー検索用
+CREATE INDEX reservations_idempotency_key_idx
+ON reservations(idempotency_key);
 ```

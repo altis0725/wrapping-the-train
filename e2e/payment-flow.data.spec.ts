@@ -1,13 +1,31 @@
 /**
  * 決済フローE2Eテスト
  *
- * 予約 → 仮押さえ → Stripe Checkout → 決済完了のフローをテストします。
- * このテストは完成した動画を持つユーザー（user-with-videos.json）で実行されます。
+ * 現在の仕様: 予約機能は「Coming Soon」状態のため、決済フローはスキップ
+ * 
+ * 予約機能が実装された際には、このテストを有効化してください。
  */
 
 import { test, expect } from "@playwright/test";
 
-test.describe("決済フロー", () => {
+test.describe("決済フロー（Coming Soon）", () => {
+  test("予約ページがComing Soon状態であることを確認", async ({ page }) => {
+    // 予約ページにアクセス
+    await page.goto("/reservations");
+    
+    // Coming Soonメッセージが表示される
+    await expect(page.getByText("Coming Soon")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("投影予約機能は準備中です")).toBeVisible();
+    
+    // スクリーンショット
+    await page.screenshot({ path: "test-screenshots/payment-coming-soon.png" });
+  });
+});
+
+// 以下は予約機能が実装された際のテストテンプレート
+// 現在はスキップされます
+
+test.describe.skip("決済フロー（実装後用）", () => {
   test("予約から決済までの完全なフロー", async ({ page }) => {
     // 1. 予約ページにアクセス
     await page.goto("/reservations");
