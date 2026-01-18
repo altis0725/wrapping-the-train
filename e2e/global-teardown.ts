@@ -69,16 +69,35 @@ async function globalTeardown(config: FullConfig) {
 }
 
 async function cleanupTestData(db: ReturnType<typeof drizzle>) {
-  // 関連データの削除順序: reservations → videos → users
+  // 関連データの削除順序: admin_audit_logs → compensation_logs → reservations → videos → users
   const testUserCondition = or(
     eq(users.loginMethod, "test"),
-    sql`${users.openId} LIKE 'test_%'`
+    sql`${users.openId} LIKE 'test_%'`,
+    sql`${users.openId} LIKE 'dev_%'`
   );
+
+  // 監査ログの削除（テストユーザーに関連するもの）
+  await db.execute(sql`
+    DELETE FROM admin_audit_logs WHERE admin_user_id IN (
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
+    )
+  `);
+  console.log(`    Deleted admin audit logs`);
+
+  // 補償ログの削除（テストユーザーの予約に関連するもの）
+  await db.execute(sql`
+    DELETE FROM compensation_logs WHERE reservation_id IN (
+      SELECT r.id FROM reservations r
+      JOIN users u ON r.user_id = u.id
+      WHERE u.login_method = 'test' OR u.open_id LIKE 'test_%' OR u.open_id LIKE 'dev_%'
+    )
+  `);
+  console.log(`    Deleted compensation logs`);
 
   // 予約の削除
   const deletedReservations = await db.delete(reservations).where(
     sql`${reservations.userId} IN (
-      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%'
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
     )`
   );
   console.log(`    Deleted reservations`);
@@ -86,10 +105,18 @@ async function cleanupTestData(db: ReturnType<typeof drizzle>) {
   // 動画の削除
   const deletedVideos = await db.delete(videos).where(
     sql`${videos.userId} IN (
-      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%'
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
     )`
   );
   console.log(`    Deleted videos`);
+
+  // 決済の削除
+  await db.execute(sql`
+    DELETE FROM payments WHERE user_id IN (
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
+    )
+  `);
+  console.log(`    Deleted payments`);
 
   // テストユーザーの削除
   const deletedUsers = await db.delete(users).where(testUserCondition);

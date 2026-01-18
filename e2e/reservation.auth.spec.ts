@@ -1,17 +1,15 @@
 /**
  * 予約フローテスト（認証済みユーザー）
  *
- * カレンダー表示 → スロット選択 → 決済のフローをテストします。
+ * 現在の仕様: 予約機能は「Coming Soon」状態
+ * 
+ * このテストは予約ページが正しく「準備中」と表示されることを確認します。
+ * 予約機能が実装された際には、このテストを更新してください。
  */
 
 import { test, expect } from "@playwright/test";
-import { mockStripeApi } from "./helpers/mock-line-auth";
 
-test.describe("予約ページ", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockStripeApi(page);
-  });
-
+test.describe("予約ページ（Coming Soon）", () => {
   test("予約ページが表示される", async ({ page }) => {
     await page.goto("/reservations");
 
@@ -19,6 +17,44 @@ test.describe("予約ページ", () => {
     await expect(page.locator("body")).toBeVisible();
   });
 
+  test("Coming Soonメッセージが表示される", async ({ page }) => {
+    await page.goto("/reservations");
+
+    // Coming Soonタイトル
+    await expect(page.getByText("Coming Soon")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("準備中メッセージが表示される", async ({ page }) => {
+    await page.goto("/reservations");
+
+    // 準備中メッセージ
+    await expect(page.getByText("投影予約機能は準備中です")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("トップページへ戻るリンクが存在する", async ({ page }) => {
+    await page.goto("/reservations");
+
+    // トップページへ戻るボタン
+    const backButton = page.getByRole("link", { name: /トップページへ戻る/ });
+    await expect(backButton).toBeVisible({ timeout: 10000 });
+  });
+
+  test("トップページへ戻るリンクが機能する", async ({ page }) => {
+    await page.goto("/reservations");
+
+    // トップページへ戻るボタンをクリック
+    const backButton = page.getByRole("link", { name: /トップページへ戻る/ });
+    await backButton.click();
+
+    // トップページに遷移
+    await expect(page).toHaveURL("/");
+  });
+});
+
+// 以下は予約機能が実装された際のテストテンプレート
+// 現在はスキップされます
+
+test.describe.skip("予約フロー（実装後用）", () => {
   test("カレンダーが表示される", async ({ page }) => {
     await page.goto("/reservations");
 
@@ -35,7 +71,7 @@ test.describe("予約ページ", () => {
 
     // 選択可能な日付ボタン
     const availableDate = page.locator(
-      '[data-testid="available-date"], [data-testid="available-date"], [role="gridcell"]:not([aria-disabled="true"])'
+      '[data-testid="available-date"], [role="gridcell"]:not([aria-disabled="true"])'
     );
 
     if ((await availableDate.count()) > 0) {
@@ -49,12 +85,6 @@ test.describe("予約ページ", () => {
       await page.waitForTimeout(500);
     }
   });
-});
-
-test.describe("スロット選択", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockStripeApi(page);
-  });
 
   test("日付選択後にスロットが表示される", async ({ page }) => {
     await page.goto("/reservations");
@@ -62,7 +92,7 @@ test.describe("スロット選択", () => {
     // カレンダーが表示されるのを待つ
     await expect(page.locator('[data-testid="calendar"]')).toBeVisible({ timeout: 30000 });
 
-    // 選択可能な日付を探す (data-testid="available-date")
+    // 選択可能な日付を探す
     const dateButton = page.locator('[data-testid="available-date"]').first();
 
     await page.waitForTimeout(1000);
@@ -107,28 +137,18 @@ test.describe("スロット選択", () => {
       }
     }
   });
-});
-
-test.describe("決済フロー", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockStripeApi(page);
-  });
 
   test("決済ボタンでStripe Checkoutに遷移", async ({ page }) => {
     await page.goto("/reservations");
 
     // 日付とスロットを選択
-    const dateButton = page.locator(
-      '[data-testid="available-date"]'
-    ).first();
+    const dateButton = page.locator('[data-testid="available-date"]').first();
 
     if ((await dateButton.count()) > 0) {
       await dateButton.click();
       await page.waitForTimeout(1000);
 
-      const slot = page.locator(
-        '[data-testid="slot"]:not([disabled]), .slot:not(.disabled)'
-      ).first();
+      const slot = page.locator('[data-testid="slot"]:not([disabled]), .slot:not(.disabled)').first();
 
       if ((await slot.count()) > 0) {
         await slot.click();
@@ -141,87 +161,10 @@ test.describe("決済フロー", () => {
 
         if ((await payButton.count()) > 0 && (await payButton.first().isEnabled())) {
           // クリックしてStripeへの遷移を確認
-          // （モック環境ではリダイレクト先が異なる可能性あり）
           const navigationPromise = page.waitForNavigation({ timeout: 5000 }).catch(() => null);
           await payButton.first().click();
 
           await page.waitForTimeout(2000);
-        }
-      }
-    }
-  });
-});
-
-test.describe("仮押さえ", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockStripeApi(page);
-  });
-
-  test("スロット選択で仮押さえが作成される", async ({ page }) => {
-    await page.goto("/reservations");
-
-    // 日付とスロットを選択
-    const dateButton = page.locator(
-      '[data-testid="available-date"]'
-    ).first();
-
-    if ((await dateButton.count()) > 0) {
-      await dateButton.click();
-      await page.waitForTimeout(1000);
-
-      const slot = page.locator(
-        '[data-testid="slot"]:not([disabled]), .slot:not(.disabled)'
-      ).first();
-
-      if ((await slot.count()) > 0) {
-        // 仮押さえAPIへのリクエストを監視
-        const responsePromise = page.waitForResponse(
-          (response) =>
-            response.url().includes("/api/reservations") &&
-            response.request().method() === "POST",
-          { timeout: 5000 }
-        ).catch(() => null);
-
-        await slot.click();
-
-        const response = await responsePromise;
-
-        if (response) {
-          // 仮押さえが成功したことを確認
-          expect(response.status()).toBeLessThan(400);
-        }
-      }
-    }
-  });
-
-  test("仮押さえの有効期限が表示される", async ({ page }) => {
-    await page.goto("/reservations");
-
-    // 日付とスロットを選択後
-    const dateButton = page.locator(
-      '[data-testid="available-date"]'
-    ).first();
-
-    if ((await dateButton.count()) > 0) {
-      await dateButton.click();
-      await page.waitForTimeout(1000);
-
-      const slot = page.locator(
-        '[data-testid="slot"]:not([disabled]), .slot:not(.disabled)'
-      ).first();
-
-      if ((await slot.count()) > 0) {
-        await slot.click();
-        await page.waitForTimeout(1000);
-
-        // 有効期限または残り時間の表示
-        const timerDisplay = page.locator(
-          '[data-testid="hold-timer"], .timer, text=/\\d+:\\d+|\\d+分/'
-        );
-
-        // タイマーが表示される場合
-        if ((await timerDisplay.count()) > 0) {
-          await expect(timerDisplay.first()).toBeVisible();
         }
       }
     }

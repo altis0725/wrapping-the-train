@@ -49,6 +49,13 @@ src/
 │   ├── validations/         # Zodスキーマ
 │   └── shotstack.ts         # Shotstack連携
 └── middleware.ts            # JWT検証・ルート保護
+
+e2e/                         # E2Eテスト (Playwright)
+├── fixtures/                # テストデータ定義
+├── helpers/                 # テストヘルパー
+├── global-setup.ts          # テストセットアップ
+├── global-teardown.ts       # テストクリーンアップ
+└── *.spec.ts                # テストファイル
 ```
 
 ## 主要画面
@@ -56,10 +63,29 @@ src/
 | パス | 画面 | 概要 |
 |------|------|------|
 | `/` | Home | LP |
-| `/create` | 動画作成 | 3段階テンプレート選択 |
+| `/create` | 動画作成 | 4段階テンプレート選択（背景6+窓1+車輪1+音楽1） |
 | `/mypage` | マイページ | 動画/予約/決済管理 |
-| `/reservations` | 投影予約 | 日時選択 |
-| `/admin` | 管理画面 | テンプレート/予約/統計 |
+| `/reservations` | 投影予約 | Coming Soon（準備中） |
+| `/admin` | 管理画面 | テンプレート/予約/統計/監査ログ |
+
+## 動画作成フロー（60秒動画）
+
+**4段階テンプレート選択**:
+
+| ステップ | 選択内容 | 説明 |
+|----------|----------|------|
+| 1 | 背景 × 6 | 10秒ずつの背景映像を6つ選択 |
+| 2 | 窓 × 1 | ルママスクで合成する窓映像 |
+| 3 | 車輪 × 1 | ルママスクで合成する車輪映像 |
+| 4 | 音楽 × 1 | BGMを選択 |
+
+**テンプレートカテゴリ**:
+| カテゴリID | 名称 |
+|------------|------|
+| 1 | 背景 |
+| 2 | 窓 |
+| 3 | 車輪 |
+| 4 | 音楽 |
 
 ## 実装パターン
 
@@ -77,6 +103,27 @@ export default async function Page() {
 // components/page-content.tsx (CC)
 "use client"
 export function PageContent({ data }) { ... }
+```
+
+## E2Eテスト
+
+**テストファイル**:
+| ファイル | 説明 |
+|----------|------|
+| `create-video.auth.spec.ts` | 動画作成フロー（4段階選択） |
+| `free-video-creation.auth.spec.ts` | 無料動画作成の完全フロー |
+| `reservation.auth.spec.ts` | 予約ページ（Coming Soon確認） |
+| `reservation.data.spec.ts` | 予約ページ（動画あり） |
+| `payment-flow.data.spec.ts` | 決済フロー |
+| `admin.admin.spec.ts` | 管理画面 |
+
+**テスト実行**:
+```bash
+# 全テスト実行
+pnpm run test:e2e
+
+# 特定のテストのみ
+pnpm exec playwright test create-video
 ```
 
 ## 参照ドキュメント

@@ -118,22 +118,45 @@ async function globalSetup(config: FullConfig) {
 }
 
 async function cleanupTestData(db: ReturnType<typeof drizzle>) {
-  // 関連データの削除順序: reservations → videos → users
+  // 関連データの削除順序: admin_audit_logs → compensation_logs → reservations → videos → users
   // テストユーザーを特定（loginMethod = 'test' または openIdが 'test_' prefix）
+
+  // 監査ログの削除（テストユーザーに関連するもの）
+  await db.execute(sql`
+    DELETE FROM admin_audit_logs WHERE admin_user_id IN (
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
+    )
+  `);
+
+  // 補償ログの削除（テストユーザーの予約に関連するもの）
+  await db.execute(sql`
+    DELETE FROM compensation_logs WHERE reservation_id IN (
+      SELECT r.id FROM reservations r
+      JOIN users u ON r.user_id = u.id
+      WHERE u.login_method = 'test' OR u.open_id LIKE 'test_%' OR u.open_id LIKE 'dev_%'
+    )
+  `);
 
   // 予約の削除
   await db.delete(reservations).where(
     sql`${reservations.userId} IN (
-      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%'
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
     )`
   );
 
   // 動画の削除
   await db.delete(videos).where(
     sql`${videos.userId} IN (
-      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%'
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
     )`
   );
+
+  // 決済の削除
+  await db.execute(sql`
+    DELETE FROM payments WHERE user_id IN (
+      SELECT id FROM users WHERE login_method = 'test' OR open_id LIKE 'test_%' OR open_id LIKE 'dev_%'
+    )
+  `);
 
   // テストユーザーの削除（dev_user_001も含む）
   await db.delete(users).where(
@@ -226,15 +249,23 @@ async function createTestData(
   // userWithReservations用の動画と予約を作成
   const userWithReservationsId = userIdMap.get("userWithReservations");
   if (userWithReservationsId) {
-    // 動画を作成
+    // 動画を作成（新仕様: 60秒動画）
     const [video] = await db
       .insert(videos)
       .values({
         userId: userWithReservationsId,
-        template1Id: 9901,
-        template2Id: 9902,
-        template3Id: 9903,
-        videoUrl: "https://example.com/test-video-reserved.mp4",
+        // 新仕様: 背景6個
+        background1TemplateId: 9901,
+        background2TemplateId: 9902,
+        background3TemplateId: 9903,
+        background4TemplateId: 9904,
+        background5TemplateId: 9905,
+        background6TemplateId: 9906,
+        // 窓・車輪・音楽
+        windowTemplateId: 9911,
+        wheelTemplateId: 9921,
+        musicTemplateId: 9931,
+        videoUrl: "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
         videoType: "free",
         status: "completed",
       })

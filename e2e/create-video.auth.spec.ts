@@ -1,7 +1,14 @@
 /**
  * 動画作成フローテスト（認証済みユーザー）
  *
- * テンプレート選択 → プレビュー → 保存のフローをテストします。
+ * 新仕様: 60秒動画（背景6個 + 窓1個 + 車輪1個 + 音楽1個）
+ * 
+ * ステップ:
+ * 1. 背景テンプレート6個を選択
+ * 2. 窓テンプレート1個を選択
+ * 3. 車輪テンプレート1個を選択
+ * 4. 音楽テンプレート1個を選択
+ * 5. 動画を作成
  */
 
 import { test, expect } from "@playwright/test";
@@ -16,66 +23,81 @@ test.describe("動画作成ページ", () => {
   test("動画作成ページが表示される", async ({ page }) => {
     await page.goto("/create");
 
-    // ページが表示される
-    await expect(page.locator("body")).toBeVisible();
-
-    // テンプレート選択UIが存在
-    const templateSection = page.locator(
-      '[data-testid="template-selector"], .template-list, section'
-    );
-    await expect(templateSection.first()).toBeVisible({ timeout: 30000 });
+    // ページタイトルが表示される
+    await expect(page.getByRole("heading", { name: /CREATE VIDEO/i })).toBeVisible({ timeout: 30000 });
   });
 
-  test("カテゴリ別テンプレートが表示される", async ({ page }) => {
+  test("4つのステップが表示される", async ({ page }) => {
     await page.goto("/create");
 
-    // 3カテゴリ（背景、窓、車輪）のテンプレートセクションがあるはず
-    const categories = page.locator(
-      '[data-testid="category"], .category-section, section h2'
-    );
-
-    // 少なくとも1つ以上のカテゴリが表示される
-    await expect(categories.first()).toBeVisible({ timeout: 30000 });
+    // ステップ: 背景、窓、車輪、音楽
+    await expect(page.getByText("背景")).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText("窓")).toBeVisible();
+    await expect(page.getByText("車輪")).toBeVisible();
+    await expect(page.getByText("音楽")).toBeVisible();
   });
 });
 
-test.describe("テンプレート選択", () => {
+test.describe("背景選択（ステップ1）", () => {
   test.beforeEach(async ({ page }) => {
     await mockShotstackApi(page);
   });
 
-  test("テンプレートを選択できる", async ({ page }) => {
+  test("背景選択UIが表示される", async ({ page }) => {
     await page.goto("/create");
 
-    // テンプレートカードを探す
-    const templateCard = page.locator(
-      '[data-testid="template-card"], .template-card, .template-item'
-    ).first();
-
-    if ((await templateCard.count()) > 0) {
-      await templateCard.click();
-
-      // 選択状態になる
-      const selectedCard = page.locator(
-        '[data-testid="template-card"].selected, .template-card.selected, [aria-selected="true"]'
-      );
-
-      // 選択後の状態変化を確認
-      await page.waitForTimeout(500);
-    }
+    // 背景選択UIが表示される
+    await expect(page.getByText("背景を6つ選択")).toBeVisible({ timeout: 30000 });
   });
 
-  test("テンプレートのサムネイルが表示される", async ({ page }) => {
+  test("6つの背景スロットが表示される", async ({ page }) => {
     await page.goto("/create");
 
-    // サムネイル画像
-    const thumbnails = page.locator(
-      '.template-card img, [data-testid="template-thumbnail"]'
-    );
+    // 「0 / 6」カウンターが表示される
+    await expect(page.getByText("0 / 6")).toBeVisible({ timeout: 30000 });
+  });
 
-    if ((await thumbnails.count()) > 0) {
-      await expect(thumbnails.first()).toBeVisible();
+  test("背景スロットをクリックするとテンプレート一覧が表示される", async ({ page }) => {
+    await page.goto("/create");
+
+    // 最初のスロットをクリック
+    const slot = page.locator('[role="button"][aria-label^="背景1"]').first();
+    await slot.waitFor({ state: "visible", timeout: 30000 });
+    await slot.click();
+
+    // テンプレート一覧が表示される
+    await expect(page.getByText("背景 1 を選択")).toBeVisible({ timeout: 10000 });
+  });
+});
+
+test.describe("ステップ遷移", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockShotstackApi(page);
+  });
+
+  test("背景6個選択後に次へボタンが有効になる", async ({ page }) => {
+    await page.goto("/create");
+
+    // 初期状態では次へボタンは無効
+    const nextButton = page.getByRole("button", { name: /次へ/i });
+    await expect(nextButton).toBeDisabled({ timeout: 30000 });
+
+    // 背景スロットをクリックしてテンプレートを選択
+    for (let i = 0; i < 6; i++) {
+      const slot = page.locator(`[role="button"][aria-label^="背景${i + 1}"]`).first();
+      await slot.click();
+      await page.waitForTimeout(300);
+      
+      // テンプレート一覧から最初のテンプレートを選択
+      const templateOption = page.locator('[role="button"][aria-pressed]').filter({ hasText: /テスト背景/i }).first();
+      if (await templateOption.count() > 0) {
+        await templateOption.click();
+      }
+      await page.waitForTimeout(300);
     }
+
+    // 6個選択後は次へボタンが有効になる
+    await expect(nextButton).toBeEnabled({ timeout: 10000 });
   });
 });
 
@@ -84,86 +106,11 @@ test.describe("プレビュー", () => {
     await mockShotstackApi(page);
   });
 
-  test("選択後にプレビューが可能", async ({ page }) => {
+  test("プレビュー領域が存在する", async ({ page }) => {
     await page.goto("/create");
 
-    // テンプレートを選択
-    const templateCards = page.locator(
-      '[data-testid="template-card"], .template-card'
-    );
-
-    // 3つのカテゴリからそれぞれ選択（実装に依存）
-    // 簡略化: 最初のテンプレートをクリック
-    if ((await templateCards.count()) > 0) {
-      await templateCards.first().click();
-
-      // プレビューボタンまたは次へボタンを探す
-      const previewButton = page.locator(
-        'button:has-text("プレビュー"), button:has-text("次へ"), [data-testid="preview-button"]'
-      );
-
-      if ((await previewButton.count()) > 0) {
-        await expect(previewButton.first()).toBeVisible();
-      }
-    }
-  });
-});
-
-test.describe("動画保存", () => {
-  test.beforeEach(async ({ page }) => {
-    await mockShotstackApi(page);
-  });
-
-  test("保存ボタンで動画が作成される", async ({ page }) => {
-    await page.goto("/create");
-
-    // 全テンプレートを選択するフローをシミュレート
-    // （実装に応じて調整が必要）
-
-    // 保存ボタンを探す
-    const saveButton = page.locator(
-      'button:has-text("保存"), button:has-text("作成"), [data-testid="save-video"]'
-    );
-
-    if ((await saveButton.count()) > 0) {
-      // クリック前にボタンが有効か確認
-      const isEnabled = await saveButton.first().isEnabled();
-
-      if (isEnabled) {
-        // APIリクエストを監視
-        const responsePromise = page.waitForResponse(
-          (response) =>
-            response.url().includes("/api/videos") ||
-            response.url().includes("shotstack"),
-          { timeout: 10000 }
-        ).catch(() => null);
-
-        await saveButton.first().click();
-
-        // 保存後の処理を確認
-        await page.waitForTimeout(2000);
-      }
-    }
-  });
-
-  test("保存後にマイページに遷移", async ({ page }) => {
-    // このテストは実際の保存処理後の遷移を確認
-    // （前提: 動画が保存可能な状態）
-
-    await page.goto("/create");
-
-    const saveButton = page.locator(
-      'button:has-text("保存"), [data-testid="save-video"]'
-    );
-
-    // 保存ボタンが有効で存在する場合のみテスト
-    if ((await saveButton.count()) > 0 && (await saveButton.first().isEnabled())) {
-      await saveButton.first().click();
-
-      // 成功時はマイページまたは完了ページに遷移
-      await page.waitForURL(/\/(mypage|create\/complete)/, { timeout: 15000 }).catch(() => {
-        // 遷移しない場合もある（エラー表示など）
-      });
-    }
+    // プレビュー領域が存在
+    const preview = page.locator('[data-testid="video-preview"], .video-preview, [aria-label*="プレビュー"]');
+    await expect(preview.first()).toBeVisible({ timeout: 30000 });
   });
 });
